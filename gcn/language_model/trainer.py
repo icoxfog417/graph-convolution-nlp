@@ -19,6 +19,7 @@ class Trainer():
         self.storage = Storage(_root)
         self.preprocessor_name = preprocessor_name
         self.__log_dir = log_dir
+        self.__built = False
         self.preprocessor = Preprocessor(
                                 text_transformers=[
                                     ct.text.UnicodeNormalizer(),
@@ -30,6 +31,7 @@ class Trainer():
                                             unknown=unknown))
 
         if os.path.exists(self.preprocessor_path):
+            self.__built = True
             self.preprocessor = joblib.load(self.preprocessor_path)
 
     @property
@@ -75,12 +77,12 @@ class Trainer():
         self.preprocessor.fit(data)
         if save:
             joblib.dump(self.preprocessor, self.preprocessor_path)
+        self.__built = True
         print("Done!")
 
-    def train(self, model, data_kind="train", batch_size=32, sequence_length=8, epochs=50, 
-              build_force=False):
-        if not os.path.exists(self.preprocessor_path) and not build_force:
-            self.build(data_kind)
+    def train(self, model, data_kind="train", batch_size=32, sequence_length=8, epochs=50):
+        if not self.__built:
+            raise Exception("Trainer's preprocessor is not trained.")
 
         r = self.download()
         step_generators = {"train": {}, "test": {}}
