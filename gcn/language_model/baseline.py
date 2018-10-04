@@ -2,12 +2,12 @@ from tensorflow.python import keras as K
 from gcn.language_model.metrics import perplexity
 
 
-def LSTMLM(vocab_size, embedding_size, hidden_size):
+def LSTMLM(vocab_size, embedding_size, hidden_size, dropout=0.7):
     # Build model
     model = K.Sequential()
     embedding = K.layers.Embedding(input_dim=vocab_size, output_dim=embedding_size)
     model.add(embedding)
-    model.add(K.layers.LSTM(hidden_size))
+    model.add(K.layers.LSTM(hidden_size, dropout=dropout))
     model.add(K.layers.Dense(embedding_size))
     # Tying encoder/decoder
     model.add(ProjectionLayer(embedding))
