@@ -69,8 +69,9 @@ class Trainer():
         return r
 
     def _limited_train(self, r):
+        train_data = r.train_data
         if self.train_data_limit > 0:
-            train_data = r.train_data[:self.train_data_limit]
+            train_data = train_data[:self.train_data_limit]
         return train_data
 
     def build(self, data_kind="train", save=True):
