@@ -1,23 +1,26 @@
 import os
 import sys
+import numpy as np
 from sklearn.externals import joblib
 from tensorflow.python import keras as K
-import chazutsu
 from chariot.storage import Storage
 import chariot.transformer as ct
 from chariot.preprocessor import Preprocessor
 from chariot.feeder import LanguageModelFeeder
+from gcn.data.multinli_data import MultiNLIData
 
 
 class Trainer():
 
     def __init__(self, root="", lang=None, min_df=5, max_df=sys.maxsize,
-                 unknown="<unk>", preprocessor_name="preprocessor", log_dir=""):
+                 unknown="<unk>", train_data_limit=-1,
+                 preprocessor_name="preprocessor", log_dir=""):
         default_root = os.path.join(os.path.dirname(__file__), "../../")
         _root = root if root else default_root
 
         self.storage = Storage(_root)
         self.preprocessor_name = preprocessor_name
+        self.train_data_limit = train_data_limit
         self.__log_dir = log_dir
         self.__built = False
         self.preprocessor = Preprocessor(
@@ -62,36 +65,36 @@ class Trainer():
 
     def download(self):
         download_dir = self.storage.data_path("raw")
-        r = chazutsu.datasets.WikiText2().download(download_dir)
+        r = MultiNLIData().download(download_dir)
         return r
+
+    def _limited_train(self, r):
+        if self.train_data_limit > 0:
+            train_data = r.train_data[:self.train_data_limit]
+        return train_data
 
     def build(self, data_kind="train", save=True):
         r = self.download()
-        data = r.train_data()
-        if data_kind == "test":
-            data = r.test_data()
-        elif data_kind == "valid":
-            data = r.valid_data()
-
+        data = self._limited_train(r) if data_kind == "train" else r.dev_data
         print("Building Dictionary from {} data...".format(data_kind))
-        self.preprocessor.fit(data)
+        self.preprocessor.fit(data["sentence"])
         if save:
             joblib.dump(self.preprocessor, self.preprocessor_path)
         self.__built = True
         print("Done!")
 
-    def train(self, model, data_kind="train", batch_size=32, sequence_length=8, epochs=50):
+    def train(self, model, batch_size=32, sequence_length=8, epochs=50):
         if not self.__built:
             raise Exception("Trainer's preprocessor is not trained.")
 
         r = self.download()
-        step_generators = {"train": {}, "test": {}}
+        step_generators = {"train": {}, "dev": {}}
 
         for k in step_generators:
             if k == "train":
-                data = r.train_data() if data_kind == "train" else r.valid_data()
+                data = self._limited_train(r)
             else:
-                data = r.test_data()
+                data = r.dev_data
 
             spec = {"sentence": ct.formatter.ShiftGenerator()}
             feeder = LanguageModelFeeder(spec)
@@ -110,14 +113,14 @@ class Trainer():
         metrics = model.fit_generator(
                     step_generators["train"]["g"](),
                     step_generators["train"]["s"],
-                    validation_data=step_generators["test"]["g"](),
-                    validation_steps=step_generators["test"]["s"],
+                    validation_data=step_generators["dev"]["g"](),
+                    validation_steps=step_generators["dev"]["s"],
                     epochs=epochs,
                     callbacks=callbacks)
 
         return metrics
 
-    def generate_text(seed_text, model, sequence_length=10, iteration=20):
+    def generate_text(self, seed_text, model, sequence_length=10, iteration=20):
         preprocessed = self.preprocessor.transform([seed_text])[0]
 
         def pad_sequence(tokens, length):
@@ -134,7 +137,7 @@ class Trainer():
             y = model.predict([x])[0]
             w = np.random.choice(np.arange(len(y)), 1, p=y)[0]
             preprocessed.append(w)
-        
+
         decoded = self.preprocessor.inverse_transform([preprocessed])
         text = " ".join(decoded[0])
 
