@@ -33,6 +33,7 @@ class Trainer():
                                             min_df=min_df, max_df=max_df,
                                             unknown=unknown))
 
+    def load_preprocessor(self):
         if os.path.exists(self.preprocessor_path):
             self.__built = True
             self.preprocessor = joblib.load(self.preprocessor_path)
@@ -75,6 +76,12 @@ class Trainer():
         return train_data
 
     def build(self, data_kind="train", save=True):
+        if not self.__built:
+            self.load_preprocessor()
+        if self.__built:
+            print("Load existing preprocessor at {}.".format(self.preprocessor_path))
+            return 0
+
         r = self.download()
         data = self._limited_train(r) if data_kind == "train" else r.dev_data
         print("Building Dictionary from {} data...".format(data_kind))
