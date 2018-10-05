@@ -13,7 +13,7 @@ class ProjectionLayer(Layer):
         return K.dot(x, K.transpose(self.weight))
 
 
-class Attention(Layer):
+class AttentionLayer(Layer):
     """
     import from Bidirectional LSTM and Attention
     https://www.kaggle.com/takuok/bidirectional-lstm-and-attention-lb-0-043
@@ -22,8 +22,10 @@ class Attention(Layer):
     def __init__(self, sequence_length,
                  W_regularizer=None, b_regularizer=None,
                  W_constraint=None, b_constraint=None,
-                 bias=True, **kwargs):
+                 bias=True, return_attentions=False, **kwargs):
+        self.sequence_length = sequence_length
         self.supports_masking = True
+        self.return_attentions = return_attentions
         self.init = initializers.get("glorot_uniform")
 
         self.W_regularizer = regularizers.get(W_regularizer)
@@ -33,24 +35,24 @@ class Attention(Layer):
         self.b_constraint = constraints.get(b_constraint)
 
         self.bias = bias
-        self.sequence_length = sequence_length
         self.embedding_dim = 0
-        super(Attention, self).__init__(**kwargs)
+        super(AttentionLayer, self).__init__(**kwargs)
 
     def build(self, input_shape):
         assert len(input_shape) == 3
 
-        self.W = self.add_weight((input_shape[-1],),
+        _input_shape = input_shape.as_list()
+        self.embedding_dim = _input_shape[-1]
+        self.W = self.add_weight(name="{}_W".format(self.name),
+                                 shape=(self.embedding_dim,),
                                  initializer=self.init,
-                                 name="{}_W".format(self.name),
                                  regularizer=self.W_regularizer,
                                  constraint=self.W_constraint)
-        self.embedding_dim = input_shape[-1]
 
         if self.bias:
-            self.b = self.add_weight((input_shape[1],),
+            self.b = self.add_weight(name="{}_b".format(self.name),
+                                     shape=(_input_shape[1],),
                                      initializer="zero",
-                                     name="{}_b".format(self.name),
                                      regularizer=self.b_regularizer,
                                      constraint=self.b_constraint)
         else:
@@ -81,9 +83,12 @@ class Attention(Layer):
 
         a /= K.cast(K.sum(a, axis=1, keepdims=True) + K.epsilon(), K.floatx())
 
-        a = K.expand_dims(a)
-        weighted_input = x * a
-        return K.sum(weighted_input, axis=1)
+        weighted_input = x * K.expand_dims(a)
+        output = K.sum(weighted_input, axis=1)
+        if self.return_attentions:
+            return output, a
+        else:
+            return output
 
     def compute_output_shape(self, input_shape):
         return input_shape[0],  self.embedding_dim
