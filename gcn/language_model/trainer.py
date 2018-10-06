@@ -3,24 +3,23 @@ import sys
 import numpy as np
 from sklearn.externals import joblib
 from tensorflow.python import keras as K
+import chazutsu
 from chariot.storage import Storage
 import chariot.transformer as ct
 from chariot.preprocessor import Preprocessor
 from chariot.feeder import LanguageModelFeeder
-from gcn.data.multinli_data import MultiNLIData
+from gcn.metrics import perplexity
 
 
 class Trainer():
 
     def __init__(self, root="", lang=None, min_df=5, max_df=sys.maxsize,
-                 unknown="<unk>", train_data_limit=-1,
-                 preprocessor_name="preprocessor", log_dir=""):
+                 unknown="<unk>", preprocessor_name="preprocessor", log_dir=""):
         default_root = os.path.join(os.path.dirname(__file__), "../../")
         _root = root if root else default_root
 
         self.storage = Storage(_root)
         self.preprocessor_name = preprocessor_name
-        self.train_data_limit = train_data_limit
         self.__log_dir = log_dir
         self.__built = False
         self.preprocessor = Preprocessor(
@@ -66,14 +65,8 @@ class Trainer():
 
     def download(self):
         download_dir = self.storage.data_path("raw")
-        r = MultiNLIData().download(download_dir)
+        r = chazutsu.datasets.WikiText2().download(download_dir)
         return r
-
-    def _limited_train(self, r):
-        train_data = r.train_data
-        if self.train_data_limit > 0:
-            train_data = train_data[:self.train_data_limit]
-        return train_data
 
     def build(self, data_kind="train", save=True):
         if not self.__built:
@@ -83,7 +76,7 @@ class Trainer():
             return 0
 
         r = self.download()
-        data = self._limited_train(r) if data_kind == "train" else r.dev_data
+        data = r.train_data() if data_kind == "train" else r.valid_data()
         print("Building Dictionary from {} data...".format(data_kind))
         self.preprocessor.fit(data["sentence"])
         if save:
@@ -91,18 +84,24 @@ class Trainer():
         self.__built = True
         print("Done!")
 
-    def train(self, model, batch_size=32, sequence_length=8, epochs=50):
+    def train(self, model, data_kind="train", lr=20, decay=0.25,
+              batch_size=20, sequence_length=35, epochs=40):
         if not self.__built:
             raise Exception("Trainer's preprocessor is not trained.")
 
         r = self.download()
-        step_generators = {"train": {}, "dev": {}}
+        step_generators = {"train": {}, "valid": {}}
+
+        # Set optimizer
+        model.compile(loss="sparse_categorical_crossentropy",
+                      optimizer=K.optimizers.SGD(lr=lr, clipnorm=0.25),
+                      metrics=["accuracy", perplexity])
 
         for k in step_generators:
             if k == "train":
-                data = self._limited_train(r)
+                data = r.train_data() if data_kind == "train" else r.valid_data()
             else:
-                data = r.dev_data
+                data = r.test_data()
 
             spec = {"sentence": ct.formatter.ShiftGenerator()}
             feeder = LanguageModelFeeder(spec)
@@ -116,13 +115,14 @@ class Trainer():
             step_generators[k]["s"] = step
 
         callbacks = [K.callbacks.ModelCheckpoint(self.model_path, save_best_only=True),
-                     K.callbacks.TensorBoard(self.tensorboard_dir)]
+                     K.callbacks.TensorBoard(self.tensorboard_dir),
+                     LossLearningRateScheduler(lr, decay)]
 
         metrics = model.fit_generator(
                     step_generators["train"]["g"](),
                     step_generators["train"]["s"],
-                    validation_data=step_generators["dev"]["g"](),
-                    validation_steps=step_generators["dev"]["s"],
+                    validation_data=step_generators["valid"]["g"](),
+                    validation_steps=step_generators["valid"]["s"],
                     epochs=epochs,
                     callbacks=callbacks)
 
@@ -150,3 +150,26 @@ class Trainer():
         text = " ".join(decoded[0])
 
         return text
+
+
+class LossLearningRateScheduler(K.callbacks.History):
+
+    def __init__(self, lr=20, decay=0.25, loss_type="val_loss"):
+        super(LossLearningRateScheduler, self).__init__()
+        self.lr = lr
+        self.decay = decay
+        self.loss_type = loss_type
+        self._best_val_loss = None
+
+    def on_epoch_begin(self, epoch, logs=None):
+        if epoch > 0:
+            current_lr = K.backend.get_value(self.model.optimizer.lr)
+            latest_loss = self.history[self.loss_type][-1]
+            if self._best_val_loss is None or latest_loss < self._best_val_loss:
+                self._best_val_loss = latest_loss
+            else:
+                self.lr = current_lr * self.decay
+
+        K.backend.set_value(self.model.optimizer.lr, self.lr)
+        print("learning rate: {}".format(self.lr))
+        return self.lr
