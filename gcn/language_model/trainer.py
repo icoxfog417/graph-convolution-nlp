@@ -14,7 +14,8 @@ from gcn.metrics import perplexity
 class Trainer():
 
     def __init__(self, root="", lang=None, min_df=5, max_df=sys.maxsize,
-                 unknown="<unk>", preprocessor_name="preprocessor", log_dir=""):
+                 unknown="<unk>", preprocessor_name="preprocessor",
+                 log_dir=""):
         default_root = os.path.join(os.path.dirname(__file__), "../../")
         _root = root if root else default_root
 
@@ -72,34 +73,38 @@ class Trainer():
         if not self.__built:
             self.load_preprocessor()
         if self.__built:
-            print("Load existing preprocessor at {}.".format(self.preprocessor_path))
+            print("Load existing preprocessor at {}.".format(
+                self.preprocessor_path))
             return 0
 
         r = self.download()
         data = r.train_data() if data_kind == "train" else r.valid_data()
         print("Building Dictionary from {} data...".format(data_kind))
-        self.preprocessor.fit(data["sentence"])
+        self.preprocessor.fit(data)
         if save:
             joblib.dump(self.preprocessor, self.preprocessor_path)
         self.__built = True
         print("Done!")
 
-    def train(self, model, data_kind="train", lr=20, decay=0.25,
+    def train(self, model, data_kind="train", lr=1e-3,
               batch_size=20, sequence_length=35, epochs=40):
         if not self.__built:
-            raise Exception("Trainer's preprocessor is not trained.")
+            raise Exception("Trainer's preprocessor is not built.")
 
         r = self.download()
         step_generators = {"train": {}, "valid": {}}
 
         # Set optimizer
         model.compile(loss="sparse_categorical_crossentropy",
-                      optimizer=K.optimizers.SGD(lr=lr, clipnorm=0.25),
+                      optimizer=K.optimizers.Adam(lr=lr),
                       metrics=["accuracy", perplexity])
 
         for k in step_generators:
             if k == "train":
-                data = r.train_data() if data_kind == "train" else r.valid_data()
+                if data_kind == "train":
+                    data = r.train_data()
+                else:
+                    data = r.valid_data()
             else:
                 data = r.test_data()
 
@@ -114,9 +119,9 @@ class Trainer():
             step_generators[k]["g"] = generator
             step_generators[k]["s"] = step
 
-        callbacks = [K.callbacks.ModelCheckpoint(self.model_path, save_best_only=True),
-                     K.callbacks.TensorBoard(self.tensorboard_dir),
-                     LossLearningRateScheduler(lr, decay)]
+        callbacks = [K.callbacks.ModelCheckpoint(self.model_path,
+                                                 save_best_only=True),
+                     K.callbacks.TensorBoard(self.tensorboard_dir)]
 
         metrics = model.fit_generator(
                     step_generators["train"]["g"](),
@@ -128,7 +133,8 @@ class Trainer():
 
         return metrics
 
-    def generate_text(self, seed_text, model, sequence_length=10, iteration=20):
+    def generate_text(self, model, seed_text,
+                      sequence_length=10, iteration=20):
         preprocessed = self.preprocessor.transform([seed_text])[0]
 
         def pad_sequence(tokens, length):
@@ -142,34 +148,14 @@ class Trainer():
 
         for _ in range(iteration):
             x = pad_sequence(preprocessed, sequence_length)
-            y = model.predict([x])[0]
-            w = np.random.choice(np.arange(len(y)), 1, p=y)[0]
+            y = model.predict([x])
+            index = min(len(preprocessed) - 1, sequence_length - 1)
+            target_word_probs = y[index][0]
+            w = np.random.choice(np.arange(len(target_word_probs)),
+                                 1, p=target_word_probs)[0]
             preprocessed.append(w)
 
         decoded = self.preprocessor.inverse_transform([preprocessed])
         text = " ".join(decoded[0])
 
         return text
-
-
-class LossLearningRateScheduler(K.callbacks.History):
-
-    def __init__(self, lr=20, decay=0.25, loss_type="val_loss"):
-        super(LossLearningRateScheduler, self).__init__()
-        self.lr = lr
-        self.decay = decay
-        self.loss_type = loss_type
-        self._best_val_loss = None
-
-    def on_epoch_begin(self, epoch, logs=None):
-        if epoch > 0:
-            current_lr = K.backend.get_value(self.model.optimizer.lr)
-            latest_loss = self.history[self.loss_type][-1]
-            if self._best_val_loss is None or latest_loss < self._best_val_loss:
-                self._best_val_loss = latest_loss
-            else:
-                self.lr = current_lr * self.decay
-
-        K.backend.set_value(self.model.optimizer.lr, self.lr)
-        print("learning rate: {}".format(self.lr))
-        return self.lr
