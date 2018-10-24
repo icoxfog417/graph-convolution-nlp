@@ -1,12 +1,31 @@
+import os
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-from gcn.graph.base_graph import BaseGraph
+from chariot.storage import Storage
 
 
-class SimilarityGraph(BaseGraph):
+class SimilarityGraph():
 
     def __init__(self, root="", graph_name="similarity_graph"):
-        super().__init__(root, graph_name)
+        default_root = os.path.join(os.path.dirname(__file__), "../../")
+        _root = root if root else default_root
+
+        self.storage = Storage(_root)
+        self.graph_name = graph_name
+
+    @property
+    def path(self):
+        path = "interim/{}.npy".format(self.graph_name)
+        return self.storage.data_path(path)
+
+    def save(self, graph):
+        np.save(self.path, graph)
+
+    def load(self):
+        if os.path.exists(self.path):
+            return np.load(self.path)
+        else:
+            return None
 
     def build(self, vocabulary,
               representation="GloVe.6B.200d", nearest_neighbor=4,
@@ -15,8 +34,9 @@ class SimilarityGraph(BaseGraph):
         self.storage.chakin(name=representation)
 
         # Make embedding matrix
+        file_path = "external/{}.txt".format(representation.lower())
         embedding = vocabulary.make_embedding(
-                        self.storage.data_path("external/glove.6B.200d.txt"))
+                        self.storage.data_path(file_path))
 
         graph = self._build(embedding, nearest_neighbor, mode)
         if save:
