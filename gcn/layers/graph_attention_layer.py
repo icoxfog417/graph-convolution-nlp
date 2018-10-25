@@ -1,3 +1,4 @@
+import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import activations, constraints, initializers, regularizers
 from tensorflow.python.keras.layers import Layer, Dropout, LeakyReLU
@@ -68,7 +69,7 @@ class GraphAttentionLayer(Layer):
 
     def build(self, input_shape):
         assert len(input_shape) >= 2
-        F = input_shape[0][-1]
+        F = input_shape[0][-1].value
 
         # Initialize weights for each attention head
         for head in range(self.attn_heads):
@@ -161,5 +162,5 @@ class GraphAttentionLayer(Layer):
         return output
 
     def compute_output_shape(self, input_shape):
-        output_shape = input_shape[0][0], self.output_dim
-        return output_shape
+        output_shape = input_shape[0][0].value, self.output_dim
+        return tf.TensorShape(output_shape)
