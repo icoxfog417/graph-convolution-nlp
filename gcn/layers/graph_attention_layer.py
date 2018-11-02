@@ -20,6 +20,8 @@ class GraphAttentionLayer(Dense):
                  attn_kernel_initializer="glorot_uniform",
                  attn_kernel_regularizer=None,
                  attn_kernel_constraint=None,
+                 attention=True,
+                 return_attention=False,
                  **kwargs):
 
         if attn_heads_reduction not in {"concat", "average"}:
@@ -41,6 +43,8 @@ class GraphAttentionLayer(Dense):
         self.attn_kernel_regularizer \
             = regularizers.get(attn_kernel_regularizer)
         self.attn_kernel_constraint = constraints.get(attn_kernel_constraint)
+        self.attention = attention
+        self.return_attention = return_attention
         self.input_spec = [InputSpec(ndim=3), InputSpec(ndim=3)]
         self.supports_masking = False
 
@@ -82,6 +86,9 @@ class GraphAttentionLayer(Dense):
                                        name="bias_{}".format(head))
                 self.biases.append(bias)
 
+            if not self.attention:
+                continue
+
             # Attention kernels
             attn_kernel_self = self.add_weight(
                                     shape=(self.units, 1),
@@ -96,6 +103,7 @@ class GraphAttentionLayer(Dense):
                                     constraint=self.attn_kernel_constraint,
                                     name="attn_kernel_neigh_{}".format(head))
             self.attn_kernels.append([attn_kernel_self, attn_kernel_neighs])
+
         self.built = True
 
     def call(self, inputs):
@@ -103,43 +111,50 @@ class GraphAttentionLayer(Dense):
         A = inputs[1]  # Adjacency matrix (B x N x N)
 
         outputs = []
+        attention = None
         for head in range(self.attn_heads):
             # W in the paper (F x F")
             kernel = self.kernels[head]
-            # Attention kernel a in the paper (2F" x 1)
-            attention_kernel = self.attn_kernels[head]
 
             # Compute inputs to attention network
             features = K.dot(X, kernel)  # (B x N x F")
-
-            # Compute feature combinations
-            # Note: [[a_1], [a_2]]^T [[Wh_i], [Wh_2]]
-            #       = [a_1]^T [Wh_i] + [a_2]^T [Wh_j]
-            # Both (B x N x 1)
-            attn_for_self = K.dot(features, attention_kernel[0])
-            attn_for_neighs = K.dot(features, attention_kernel[1])
-
-            # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
-            # dense becomes (B x N x N) via broadcasting
-            dense = attn_for_self + tf.transpose(attn_for_neighs, (0, 2, 1))
-
-            # Add nonlinearty
-            dense = LeakyReLU(alpha=0.2)(dense)
-
-            # Mask values before activation (Vaswani et al., 2017)
-            mask = -10e9 * (1.0 - A)
-            dense += mask
-
-            # Apply softmax to get attention coefficients
-            dense = K.softmax(dense)  # (B x N x N)
-
-            # Apply dropout to features and attention coefficients
-            dropout_attn = Dropout(self.dropout_rate)(dense)  # (B x N x N)
             dropout_feat = Dropout(self.dropout_rate)(features)  # (B x N x F")
 
-            # Linear combination with neighbors" features
-            # (B x N x F")
-            node_features = tf.matmul(dropout_attn, dropout_feat)
+            if not self.attention:
+                attention = A
+                node_features = tf.matmul(attention, dropout_feat)  # (N x F")
+            else:
+                # Attention kernel a in the paper (2F" x 1)
+                attention_kernel = self.attn_kernels[head]
+
+                # Compute feature combinations
+                # Note: [[a_1], [a_2]]^T [[Wh_i], [Wh_2]]
+                #       = [a_1]^T [Wh_i] + [a_2]^T [Wh_j]
+                # Both (B x N x 1)
+                attn_for_self = K.dot(features, attention_kernel[0])
+                attn_for_neighs = K.dot(features, attention_kernel[1])
+
+                # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
+                # attention becomes (B x N x N) via broadcasting
+                attention = attn_for_self + tf.transpose(attn_for_neighs,
+                                                         (0, 2, 1))
+
+                # Add nonlinearty
+                attention = LeakyReLU(alpha=0.2)(attention)
+
+                # Mask values before activation (Vaswani et al., 2017)
+                mask = -10e9 * (1.0 - A)
+                attention += mask
+
+                # Apply softmax to get attention coefficients
+                attention = K.softmax(attention)  # (B x N x N)
+
+                # Apply dropout to features and attention coefficients
+                dropout_attn = Dropout(self.dropout_rate)(attention)  # (B x N x N)
+
+                # Linear combination with neighbors" features
+                # (B x N x F")
+                node_features = tf.matmul(dropout_attn, dropout_feat)  # (N x F")
 
             if self.use_bias:
                 node_features = K.bias_add(node_features, self.biases[head])
@@ -157,13 +172,20 @@ class GraphAttentionLayer(Dense):
         else:
             output = K.mean(K.stack(outputs), axis=0)  # (B x N x F")
             # If "average", compute the activation here (Eq. 6)
-            output = self.activation(output)
+            # output = self.activation(output)
 
-        return output
+        if self.return_attention:
+            return (output, attention)
+        else:
+            return output
 
     def compute_output_shape(self, input_shape):
         X_dims, A_dims = [dims.as_list() for dims in input_shape]
         assert len(X_dims) == 3
         assert len(A_dims) == 3
         output_shape = X_dims[0], X_dims[0], self.output_dim
-        return tf.TensorShape(output_shape)
+
+        if self.return_attention:
+            return (tf.TensorShape(output_shape), tf.TensorShape(A_dims))
+        else:
+            return tf.TensorShape(output_shape)
