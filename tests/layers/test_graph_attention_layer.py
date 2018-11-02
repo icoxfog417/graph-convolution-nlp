@@ -43,9 +43,10 @@ class TestGraphAttentionLayer(unittest.TestCase):
         feature_units = 1
         problem_count = 1000
 
-        node_inputs, matrix_inputs, answers = self.make_problems(
-                                                node_count, feature_size,
-                                                feature_units, problem_count)
+        node_inputs, matrix_inputs, answers, _ = self.make_problems(
+                                                    node_count, feature_size,
+                                                    feature_units,
+                                                    problem_count)
 
         model = self.make_graph_attention_network(
                     node_count, feature_size, feature_units,
@@ -58,14 +59,14 @@ class TestGraphAttentionLayer(unittest.TestCase):
         self.assertLess(last_loss, 1e-1)
 
     def test_attention(self):
-        node_count = 4
-        feature_size = 3
-        feature_units = 1
+        node_count = 5
+        feature_size = 8
+        feature_units = 3
         problem_count = 1000
 
-        node_inputs, matrix_inputs, answers = self.make_problems(
-                                                node_count, feature_size,
-                                                feature_units, problem_count)
+        params = self.make_problems(node_count, feature_size,
+                                    feature_units, problem_count)
+        node_inputs, matrix_inputs, answers, attn_answers = params
 
         model, model_attn = self.make_graph_attention_network(
                                 node_count, feature_size, feature_units,
@@ -80,12 +81,11 @@ class TestGraphAttentionLayer(unittest.TestCase):
         attentions = model_attn.predict([node_inputs[sample_index],
                                         matrix_inputs[sample_index]])
 
-        attention_answers = answers[sample_index]
-        attention_answers[attention_answers > 0] = 1
-
+        print(attentions[1])
+        print(attn_answers[1])
         loss = 0
         for i in range(test_samples):
-            norm = np.linalg.norm(attention_answers[i] - attentions[i])
+            norm = np.linalg.norm(attn_answers[i] - attentions[i])
             loss += norm
         loss = loss / test_samples
         self.assertLess(loss, 1e-1)
@@ -109,15 +109,20 @@ class TestGraphAttentionLayer(unittest.TestCase):
                             (problem_count, node_count, node_count))
 
         answers = []
+        attention_answers = []
         for n, m in zip(node_inputs, matrix_inputs):
             values = np.linalg.norm(n, axis=1)
             max_index = np.argmax(values * m, axis=1)
             answer = values[max_index]
             answers.append(answer.reshape(len(n), 1))
+            attn = np.zeros(m.shape)
+            attn[np.arange(len(attn)), max_index] = 1
+            attention_answers.append(attn)
 
         answers = np.array(answers)
+        attention_answers = np.array(attention_answers)
 
-        return node_inputs, matrix_inputs, answers
+        return node_inputs, matrix_inputs, answers, attention_answers
 
     def make_graph_attention_network(self, node_count,
                                      feature_size, feature_units,
