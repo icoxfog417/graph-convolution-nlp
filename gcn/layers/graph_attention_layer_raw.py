@@ -116,7 +116,7 @@ class GraphAttentionLayer(Layer):
 
             # Compute inputs to attention network
             features = K.dot(X, kernel)  # (N x F")
-            
+
             # Compute feature combinations
             # Note: [[a_1], [a_2]]^T [[Wh_i], [Wh_2]] = [a_1]^T [Wh_i] + [a_2]^T [Wh_j]
             attn_for_self = K.dot(features, attention_kernel[0])    # (N x 1), [a_1]^T [Wh_i]

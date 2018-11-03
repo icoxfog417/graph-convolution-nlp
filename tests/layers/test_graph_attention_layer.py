@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+from scipy.spatial import distance_matrix
 from tensorflow.python import keras as K
 from gcn.layers.graph_attention_layer import GraphAttentionLayer
 
@@ -60,12 +61,12 @@ class TestGraphAttentionLayer(unittest.TestCase):
 
     def test_attention(self):
         node_count = 5
-        feature_size = 8
+        feature_size = 3
         feature_units = 3
-        problem_count = 1000
+        problem_count = 100000
 
         params = self.make_problems(node_count, feature_size,
-                                    feature_units, problem_count)
+                                    feature_units, problem_count, kind="distance")
         node_inputs, matrix_inputs, answers, attn_answers = params
 
         model, model_attn = self.make_graph_attention_network(
@@ -74,30 +75,33 @@ class TestGraphAttentionLayer(unittest.TestCase):
                                 return_attention=True)
         model.compile(loss="mse", optimizer="adam")
         model.fit([node_inputs, matrix_inputs], answers,
-                  validation_split=0.3, epochs=50)
+                  validation_split=0.3, epochs=1)
 
         test_samples = 10
         sample_index = np.random.randint(problem_count, size=test_samples)
         attentions = model_attn.predict([node_inputs[sample_index],
                                         matrix_inputs[sample_index]])
 
-        print(attentions[1])
-        print(attn_answers[1])
+        print(attentions[1][0])
+        print(matrix_inputs[sample_index][1])
+        print(attn_answers[sample_index][1])
         loss = 0
         for i in range(test_samples):
-            norm = np.linalg.norm(attn_answers[i] - attentions[i])
+            norm = np.linalg.norm(attn_answers[i] - attentions[i][0])
             loss += norm
         loss = loss / test_samples
         self.assertLess(loss, 1e-1)
 
     def make_problems(self, node_count, feature_size, feature_units,
-                      problem_count):
+                      problem_count, kind="max"):
         """
-        Problem: attention to maximum neighbor.
+        kind=max: attention to maximum neighbor.
         Node         Matrix      Answer
         [1, 9, 3]     [0, 1, 1    [9, 3, 1]
                        1, 0, 1,
                        1, 0, 0]
+        
+        kind=distance: attention to minimum distance neighbor.
         """
 
         node_samples = problem_count * node_count * feature_size
@@ -112,11 +116,16 @@ class TestGraphAttentionLayer(unittest.TestCase):
         attention_answers = []
         for n, m in zip(node_inputs, matrix_inputs):
             values = np.linalg.norm(n, axis=1)
-            max_index = np.argmax(values * m, axis=1)
-            answer = values[max_index]
-            answers.append(answer.reshape(len(n), 1))
+            if kind == "max":
+                target_index = np.argmax(values * m, axis=1)
+            else:
+                distance = distance_matrix(n, n)
+                mask = 10e9 * (1.0 - m)
+                target_index = np.argmin(distance * m + mask, axis=1)
+
+            answers.append(values[target_index].reshape((-1, 1)))
             attn = np.zeros(m.shape)
-            attn[np.arange(len(attn)), max_index] = 1
+            attn[np.arange(len(attn)), target_index] = 1
             attention_answers.append(attn)
 
         answers = np.array(answers)
@@ -129,12 +138,14 @@ class TestGraphAttentionLayer(unittest.TestCase):
                                      head=1, merge="concat",
                                      activation=False,
                                      return_attention=False):
+
         nodes = K.layers.Input(shape=(node_count, feature_size))
         matrix = K.layers.Input(shape=(node_count, node_count))
         layer = GraphAttentionLayer(feature_units=feature_units,
                                     attn_heads=head,
                                     attn_heads_reduction=merge,
-                                    return_attention=return_attention)
+                                    return_attention=return_attention,
+                                    use_bias=False)
 
         if return_attention:
             output, attn = layer([nodes, matrix])

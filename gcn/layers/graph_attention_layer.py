@@ -90,19 +90,14 @@ class GraphAttentionLayer(Dense):
                 continue
 
             # Attention kernels
-            attn_kernel_self = self.add_weight(
-                                    shape=(self.units, 1),
-                                    initializer=self.attn_kernel_initializer,
-                                    regularizer=self.attn_kernel_regularizer,
-                                    constraint=self.attn_kernel_constraint,
-                                    name="attn_kernel_self_{}".format(head),)
-            attn_kernel_neighs = self.add_weight(
-                                    shape=(self.units, 1),
-                                    initializer=self.attn_kernel_initializer,
-                                    regularizer=self.attn_kernel_regularizer,
-                                    constraint=self.attn_kernel_constraint,
-                                    name="attn_kernel_neigh_{}".format(head))
-            self.attn_kernels.append([attn_kernel_self, attn_kernel_neighs])
+            attn_kernel = self.add_weight(
+                            shape=(self.units * 2, 1),
+                            initializer=self.attn_kernel_initializer,
+                            regularizer=self.attn_kernel_regularizer,
+                            constraint=self.attn_kernel_constraint,
+                            name="attn_kernel_{}".format(head),)
+
+            self.attn_kernels.append(attn_kernel)
 
         self.built = True
 
@@ -111,7 +106,7 @@ class GraphAttentionLayer(Dense):
         A = inputs[1]  # Adjacency matrix (B x N x N)
 
         outputs = []
-        attention = None
+        attentions = []
         for head in range(self.attn_heads):
             # W in the paper (F x F")
             kernel = self.kernels[head]
@@ -126,20 +121,26 @@ class GraphAttentionLayer(Dense):
             else:
                 # Attention kernel a in the paper (2F" x 1)
                 attention_kernel = self.attn_kernels[head]
+                n_count = A.shape.as_list()[1]
 
                 # Compute feature combinations
                 # Note: [[a_1], [a_2]]^T [[Wh_i], [Wh_2]]
                 #       = [a_1]^T [Wh_i] + [a_2]^T [Wh_j]
                 # Both (B x N x 1)
-                attn_for_self = K.dot(features, attention_kernel[0])
-                attn_for_neighs = K.dot(features, attention_kernel[1])
+                self_f = K.repeat_elements(features, n_count, axis=2)
+                self_f = K.reshape(self_f, (-1, n_count, n_count, self.units))
+                neighbor_f = K.repeat_elements(
+                                tf.transpose(features, (0, 2, 1)),
+                                n_count, axis=1)
+                neighbor_f = K.reshape(neighbor_f,
+                                       (-1, n_count, n_count, self.units))
+                attention = tf.concat((self_f, neighbor_f), axis=-1)
+                attention = K.reshape(attention,
+                                      (-1, n_count ** 2, 2 * self.units))
+                attention = K.dot(attention, attention_kernel)
+                attention = K.reshape(attention, (-1, n_count, n_count))
 
-                # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
-                # attention becomes (B x N x N) via broadcasting
-                attention = attn_for_self + tf.transpose(attn_for_neighs,
-                                                         (0, 2, 1))
-
-                # Add nonlinearty
+                # Add nonlinearty (alpha=0.2 is tensorflow default)
                 attention = LeakyReLU(alpha=0.2)(attention)
 
                 # Mask values before activation (Vaswani et al., 2017)
@@ -163,6 +164,8 @@ class GraphAttentionLayer(Dense):
                 # If "concat", compute the activation here (Eq. 5)
                 node_features = self.activation(node_features)
 
+            if self.return_attention:
+                attentions.append(attention)
             # Add output of attention head to final output
             outputs.append(node_features)
 
@@ -172,10 +175,11 @@ class GraphAttentionLayer(Dense):
         else:
             output = K.mean(K.stack(outputs), axis=0)  # (B x N x F")
             # If "average", compute the activation here (Eq. 6)
-            # output = self.activation(output)
+            output = self.activation(output)
 
         if self.return_attention:
-            return (output, attention)
+            attentions = K.stack(attentions, axis=1)
+            return (output, attentions)
         else:
             return output
 
@@ -186,6 +190,7 @@ class GraphAttentionLayer(Dense):
         output_shape = X_dims[0], X_dims[0], self.output_dim
 
         if self.return_attention:
-            return (tf.TensorShape(output_shape), tf.TensorShape(A_dims))
+            return (tf.TensorShape(output_shape),
+                    tf.TensorShape(A_dims.insert(1, self.attn_heads)))
         else:
             return tf.TensorShape(output_shape)
