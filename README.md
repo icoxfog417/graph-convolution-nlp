@@ -1,4 +1,4 @@
-# Graph Convolution NLP
+# Graph Convolution for NLP
 
 Research project to apply Graph Convolution to NLP.
 
