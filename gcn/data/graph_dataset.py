@@ -31,11 +31,11 @@ class GraphDataset():
     def download_file_path(self):
         return self.storage.data_path("raw/{}.zip".format(self.kind))
 
-    def download(self):
+    def download(self, return_mask=True):
         # Check downloaded file
         if os.path.isdir(self.data_root):
             print("{} dataset is already downloaded.".format(self.kind))
-            return self.load()
+            return self.load(return_mask)
 
         # Download dataset
         resp = requests.get(self.download_url, stream=True)
@@ -49,9 +49,9 @@ class GraphDataset():
             z.extractall(path=self.data_root)
         os.remove(self.download_file_path)
 
-        return self.load()
+        return self.load(return_mask)
 
-    def load(self):
+    def load(self, return_mask):
         """
         Loads input data (reference from: https://github.com/tkipf/gcn/blob/master/gcn/utils.py)
         ind.dataset_str.x => the feature vectors of the training instances as scipy.sparse.csr.csr_matrix object;
@@ -105,22 +105,29 @@ class GraphDataset():
         labels = np.vstack((ally, ty))
         labels[test_idx, :] = labels[test_idx_range, :]
 
-        idx_test = test_idx_range.tolist()
-        idx_train = list(range(len(y)))
-        idx_val = list(range(len(y), len(y)+500))
+        idx_test = test_idx_range
+        idx_train = np.array(range(len(y)))
+        idx_val = np.array(range(len(y), len(y)+500))
 
-        train_mask = self.sample_mask(idx_train, labels.shape[0])
-        val_mask = self.sample_mask(idx_val, labels.shape[0])
-        test_mask = self.sample_mask(idx_test, labels.shape[0])
+        if return_mask:
+            train_mask = self.sample_mask(idx_train, labels.shape[0])
+            val_mask = self.sample_mask(idx_val, labels.shape[0])
+            test_mask = self.sample_mask(idx_test, labels.shape[0])
 
-        y_train = np.zeros(labels.shape)
-        y_val = np.zeros(labels.shape)
-        y_test = np.zeros(labels.shape)
-        y_train[train_mask, :] = labels[train_mask, :]
-        y_val[val_mask, :] = labels[val_mask, :]
-        y_test[test_mask, :] = labels[test_mask, :]
+            y_train = np.zeros(labels.shape)
+            y_val = np.zeros(labels.shape)
+            y_test = np.zeros(labels.shape)
+            y_train[train_mask, :] = labels[train_mask, :]
+            y_val[val_mask, :] = labels[val_mask, :]
+            y_test[test_mask, :] = labels[test_mask, :]
 
-        return adj, features, y_train, y_val, y_test, idx_train, idx_val, idx_test
+            return adj, features, y_train, y_val, y_test, train_mask, val_mask, test_mask
+        else:
+
+            y_train = labels[idx_train, :]
+            y_val = labels[idx_val, :]
+            y_test = labels[idx_test, :]
+            return adj, features, y_train, y_val, y_test, idx_train, idx_val, idx_test
 
     def sample_mask(self, idx, length):
         """Create mask."""

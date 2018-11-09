@@ -175,7 +175,8 @@ class GraphAttentionLayer(Dense):
         else:
             output = K.mean(K.stack(outputs), axis=0)  # (B x N x F")
             # If "average", compute the activation here (Eq. 6)
-            output = self.activation(output)
+
+        output = self.activation(output)
 
         if self.return_attention:
             attentions = K.stack(attentions, axis=1)
