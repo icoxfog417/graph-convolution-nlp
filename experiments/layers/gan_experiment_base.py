@@ -34,11 +34,6 @@ def preprocess_features(features):
 
 
 def run_experiment(original=True, attention=True):
-    if original:
-        from gcn.layers.graph_attention_layer_original import GraphAttentionLayer
-    else:
-        from gcn.layers.graph_attention_layer import GraphAttentionLayer
-
     # Read data
     root = os.path.join(os.path.dirname(__file__), "../../")
     storage = Storage(root)
@@ -66,9 +61,11 @@ def run_experiment(original=True, attention=True):
 
     # Model definition (as per Section 3.3 of the paper)
     if original:
+        from gcn.layers.graph_attention_layer_original import GraphAttentionLayer
         X_in = K.layers.Input(shape=(F,))
-        A_in = K.layers.Input(shape=(N,))    
+        A_in = K.layers.Input(shape=(N,))
     else:
+        from gcn.layers.graph_attention_layer import GraphAttentionLayer
         X_in = K.layers.Input(shape=(N, F))
         A_in = K.layers.Input(shape=(N, N))
 
