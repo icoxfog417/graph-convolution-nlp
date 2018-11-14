@@ -61,54 +61,29 @@ class TestGraphAttentionLayer(unittest.TestCase):
         self.assertLess(last_loss, 1e-1)
 
     def test_attention(self):
-        node_count = 5
-        feature_size = 3
-        feature_units = 3
-        problem_count = 3000
-
-        params = self.make_problems(node_count, feature_size,
-                                    feature_units, problem_count,
-                                    kind="distance")
-        node_inputs, matrix_inputs, answers, attn_answers = params
-
-        model, model_attn = self.make_graph_attention_network(
-                                node_count, feature_size, feature_units,
-                                merge="average", activation=True,
-                                return_attention=True)
-        model.compile(loss="mse", optimizer="adam")
-        model.fit([node_inputs, matrix_inputs], answers,
-                  validation_split=0.3, epochs=10)
-
-        test_samples = 10
-        sample_index = np.random.randint(problem_count, size=test_samples)
-        attentions = model_attn.predict([node_inputs[sample_index],
-                                        matrix_inputs[sample_index]])
-
-        print(attentions[1][0])
-        print(matrix_inputs[sample_index][1])
-        print(attn_answers[sample_index][1])
-        loss = 0
-        for i in range(test_samples):
-            norm = np.linalg.norm(attn_answers[i] - attentions[i][0])
-            loss += norm
-        loss = loss / test_samples
-        self.assertLess(loss, 1e-1)
+        self._test_attention()
 
     def test_attention_theoretical(self):
-        node_count = 5
-        feature_size = 3
-        feature_units = 3
-        problem_count = 3000
+        self._test_attention(theoretical=True)
+
+    def _test_attention(self, theoretical=False):
+        node_count = 10
+        feature_size = 1
+        feature_units = 1
+        problem_count = 30000
 
         params = self.make_problems(node_count, feature_size,
-                                    feature_units, problem_count,
-                                    kind="distance")
+                                    feature_units, problem_count)
         node_inputs, matrix_inputs, answers, attn_answers = params
 
-        model, model_attn = self.make_simple_attention_network(
-                                node_count, feature_size, feature_units,
-                                activation=True,
-                                return_attention=True)
+        if not theoretical:
+            model, model_attn = self.make_graph_attention_network(
+                                    node_count, feature_size, feature_units,
+                                    merge="average", return_attention=True)
+        else:
+            model, model_attn = self.make_simple_attention_network(
+                                    node_count, feature_size, feature_units,
+                                    return_attention=True)
 
         model.compile(loss="mse", optimizer="adam")
         model.fit([node_inputs, matrix_inputs], answers,
@@ -119,30 +94,22 @@ class TestGraphAttentionLayer(unittest.TestCase):
         attentions = model_attn.predict([node_inputs[sample_index],
                                         matrix_inputs[sample_index]])
 
-        attentions = attentions
-        print(attentions[1])
-        print(matrix_inputs[sample_index][1])
-        print(attn_answers[sample_index][1])
-        loss = 0
-        for i in range(test_samples):
-            norm = np.linalg.norm(attn_answers[i] - attentions[i])
-            loss += norm
-        loss = loss / test_samples
-        self.assertLess(loss, 1e-1)
+        if not theoretical:
+            attentions = attentions[0]  # attention of head 0
+
+        loss, hit_prob = self.calculate_attention_loss(attentions, attn_answers)
+        print(("Theoretical" if theoretical else "Predicted") + " version score.")
+        print("loss: {}, hit_prob: {}".format(loss, hit_prob))
+        self.assertTrue(loss < 0.1)
 
     def make_problems(self, node_count, feature_size, feature_units,
-                      problem_count, kind="max"):
+                      problem_count):
         """
-        kind=max: attention to maximum neighbor.
-        Node         Matrix      Answer
-        [1, 9, 3]     [0, 1, 1    [9, 3, 1]
-                       1, 0, 1,
-                       1, 0, 0]
-        kind=distance: attention to minimum distance neighbor.
+        Make task to extract the nearest node from neighbors.
         """
 
         node_samples = problem_count * node_count * feature_size
-        node_inputs = np.random.uniform(size=node_samples).reshape(
+        node_inputs = np.random.uniform(high=10, size=node_samples).reshape(
                         (problem_count, node_count, feature_size))
 
         matrix_samples = problem_count * node_count * node_count
@@ -152,15 +119,11 @@ class TestGraphAttentionLayer(unittest.TestCase):
         answers = []
         attention_answers = []
         for n, m in zip(node_inputs, matrix_inputs):
-            values = np.linalg.norm(n, axis=1)
-            if kind == "max":
-                target_index = np.argmax(values * m, axis=1)
-            else:
-                distance = distance_matrix(n, n)
-                mask = 10e9 * (1.0 - m)
-                target_index = np.argmin(distance * m + mask, axis=1)
+            distance = distance_matrix(n, n)
+            mask = 10e9 * (1.0 - m)
+            target_index = np.argmin(distance * m + mask, axis=1)
 
-            answers.append(values[target_index].reshape((-1, 1)))
+            answers.append(n[target_index])
             attn = np.zeros(m.shape)
             attn[np.arange(len(attn)), target_index] = 1
             attention_answers.append(attn)
@@ -173,7 +136,6 @@ class TestGraphAttentionLayer(unittest.TestCase):
     def make_graph_attention_network(self, node_count,
                                      feature_size, feature_units,
                                      head=1, merge="concat",
-                                     activation=False,
                                      return_attention=False):
 
         nodes = K.layers.Input(shape=(node_count, feature_size))
@@ -188,8 +150,8 @@ class TestGraphAttentionLayer(unittest.TestCase):
         else:
             output = layer([nodes, matrix])
 
-        if activation:
-            output = K.layers.Dense(1)(output)
+        if feature_size != feature_units:
+            output = K.layers.Dense(feature_size)(output)
 
         model = K.models.Model(inputs=[nodes, matrix], outputs=output)
         if return_attention:
@@ -200,7 +162,6 @@ class TestGraphAttentionLayer(unittest.TestCase):
 
     def make_simple_attention_network(self, node_count,
                                       feature_size, feature_units,
-                                      activation=False,
                                       return_attention=False):
 
         from tests.layers.simple_attention_layer import SimpleAttentionLayer
@@ -216,8 +177,8 @@ class TestGraphAttentionLayer(unittest.TestCase):
         else:
             output = layer([nodes, matrix])
 
-        if activation:
-            output = K.layers.Dense(1)(output)
+        if feature_size != feature_units:
+            output = K.layers.Dense(feature_size)(output)
 
         model = K.models.Model(inputs=[nodes, matrix], outputs=output)
         if return_attention:
@@ -226,3 +187,16 @@ class TestGraphAttentionLayer(unittest.TestCase):
         else:
             return model
 
+    def calculate_attention_loss(self, predicted, answers):
+        loss = 0
+        hit_prob = 0
+
+        for p, a in zip(predicted, answers):
+            norm = np.linalg.norm(p * a - a)
+            hits = np.sum(np.equal(np.argmax(p, axis=1),
+                                   np.argmax(a, axis=1)))
+            hit_prob += hits / len(p)
+            loss += norm
+        loss = loss / len(predicted)
+        hit_prob = hit_prob / len(predicted)
+        return loss, hit_prob

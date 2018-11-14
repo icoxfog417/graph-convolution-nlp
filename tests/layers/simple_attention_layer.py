@@ -31,6 +31,7 @@ class SimpleAttentionLayer(Dense):
         assert len(A_dims) == 3 and A_dims[1] == A_dims[2]
 
         F = X_dims[-1]
+        N = X_dims[1]
 
         for kind in ["self", "neighbor", "attention"]:
             if kind == "self":
@@ -54,7 +55,7 @@ class SimpleAttentionLayer(Dense):
                 self.attention_kernel = kernel
 
         if self.use_bias:
-            self.bias = self.add_weight(shape=shape[1],
+            self.bias = self.add_weight(shape=(N, N),
                                         initializer=self.bias_initializer,
                                         regularizer=self.bias_regularizer,
                                         constraint=self.bias_constraint,
@@ -82,7 +83,6 @@ class SimpleAttentionLayer(Dense):
 
         attention = K.dot(tf.nn.tanh(additive), self.attention_kernel)
         attention = K.reshape(attention, (-1, node_count, node_count))
-
         if self.use_bias:
             attention = K.bias_add(attention, self.bias)
 
