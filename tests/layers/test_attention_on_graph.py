@@ -27,22 +27,22 @@ class TestAttentionOnGraph(unittest.TestCase):
         problem_count = 10000
         validation_count = 5
 
-        model = self.make_simple_attention_network(
-                    node_count, feature_size, feature_units,
-                    node_axis, merge_method,
-                    use_attention_kernel)
-
-        model.compile(loss="categorical_crossentropy", optimizer="adam",
-                      metrics=["accuracy"])
-
         last_accs = []
         for i in range(validation_count):
+            model = self.make_simple_attention_network(
+                        node_count, feature_size, feature_units,
+                        node_axis, merge_method,
+                        use_attention_kernel)
+
+            model.compile(loss="categorical_crossentropy", optimizer="adam",
+                          metrics=["accuracy"])
+
             params = self.make_problems(node_count, feature_size,
                                         feature_units, problem_count)
             node_inputs, matrix_inputs, answers, attn_answers = params
 
             metrics = model.fit([node_inputs, matrix_inputs], attn_answers,
-                                validation_split=0.2, epochs=5)
+                                validation_split=0.2, epochs=8)
             acc = metrics.history["val_acc"][-1]
             last_accs.append(acc)
 

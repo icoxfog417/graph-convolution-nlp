@@ -1,12 +1,13 @@
 import unittest
 import numpy as np
 from scipy.spatial import distance_matrix
-import tensorflow as tf
 from tensorflow.python import keras as K
+from gcn.layers.graph_attention_layer_before import GraphAttentionLayer as GraphAttentionLayerB
 from gcn.layers.graph_attention_layer import GraphAttentionLayer
 
 
 class TestGraphAttentionLayer(unittest.TestCase):
+    TEST_PATTERN = (10, 2, 2)
 
     def xtest_forward(self):
         node_count = 12
@@ -52,75 +53,95 @@ class TestGraphAttentionLayer(unittest.TestCase):
 
         model = self.make_graph_attention_network(
                     node_count, feature_size, feature_units,
-                    merge="average", activation=True)
+                    merge="average")
         model.compile(loss="mse", optimizer="adam")
         metrics = model.fit([node_inputs, matrix_inputs], answers,
                             validation_split=0.3,
                             epochs=50)
         last_loss = metrics.history["val_loss"][-1]
-        self.assertLess(last_loss, 1e-1)
+        min_loss = np.min(metrics.history["val_loss"])
+        self.assertEqual(last_loss, min_loss)
 
     def test_attention(self):
-        self._test_attention()
+        node_count, feature_size, feature_units = self.TEST_PATTERN
 
-    def test_attention_theoretical(self):
-        self._test_attention(theoretical=True)
-
-    def _test_attention(self, theoretical=False):
-        node_count = 10
-        feature_size = 1
-        feature_units = 1
-        problem_count = 30000
-
-        params = self.make_problems(node_count, feature_size,
-                                    feature_units, problem_count)
-        node_inputs, matrix_inputs, answers, attn_answers = params
-
-        if not theoretical:
+        def make_model():
             model, model_attn = self.make_graph_attention_network(
                                     node_count, feature_size, feature_units,
-                                    merge="average", return_attention=True)
-        else:
+                                    return_attention=True)
+            return model, model_attn
+
+        loss, hit_prob = self._test_attention(make_model,
+                                              node_count,
+                                              feature_size, feature_units,
+                                              header="GAL After")
+
+        self.assertGreater(hit_prob, 0.7)
+
+    def xtest_attention_before(self):
+        node_count, feature_size, feature_units = self.TEST_PATTERN
+
+        def make_model():
+            model, model_attn = self.make_graph_attention_network(
+                                    node_count, feature_size, feature_units,
+                                    return_attention=True, before=True)
+            return model, model_attn
+
+        loss, hit_prob = self._test_attention(make_model,
+                                              node_count,
+                                              feature_size, feature_units,
+                                              header="GAL Before")
+        self.assertGreater(hit_prob, 0.7)
+
+    def xtest_attention_theoretical(self):
+        node_count, feature_size, feature_units = self.TEST_PATTERN
+
+        def make_model():
             model, model_attn = self.make_simple_attention_network(
                                     node_count, feature_size, feature_units,
                                     return_attention=True)
+            return model, model_attn
 
-        model.compile(loss="mse", optimizer="adam")
-        model.fit([node_inputs, matrix_inputs], answers,
-                  validation_split=0.3, epochs=10)
+        loss, hit_prob = self._test_attention(make_model,
+                                              node_count,
+                                              feature_size, feature_units,
+                                              header="Theoretical Attention")
+        self.assertGreater(hit_prob, 0.7)
 
-        test_samples = 10
-        sample_index = np.random.randint(problem_count, size=test_samples)
-        attentions = model_attn.predict([node_inputs[sample_index],
-                                        matrix_inputs[sample_index]])
+    def _test_attention(self, make_model,
+                        node_count, feature_size, feature_units,
+                        problem_count=10000, varidation_count=5,
+                        header=""):
 
-        if not theoretical:
-            attentions = attentions[0]  # attention of head 0
+        losses = []
+        hit_probs = []
+        for i in range(varidation_count):
+            model, model_attn = make_model()
+            params = self.make_problems(node_count, feature_size,
+                                        feature_units, problem_count)
+            node_inputs, matrix_inputs, answers, attn_answers = params
 
-        loss, hit_prob = self.calculate_attention_loss(attentions, attn_answers)
-        print(("Theoretical" if theoretical else "Predicted") + " version score.")
-        print("loss: {}, hit_prob: {}".format(loss, hit_prob))
-        self.assertTrue(loss < 0.1)
+            model.compile(loss="mse", optimizer="adam")
+            model.fit([node_inputs, matrix_inputs], answers,
+                      validation_split=0.3, epochs=20)
 
-    def test_attention_learning(self):
-        node_count = 10
-        feature_size = 1
-        feature_units = 1
-        problem_count = 30000
+            attentions = model_attn.predict([node_inputs, matrix_inputs])
 
-        params = self.make_problems(node_count, feature_size,
-                                    feature_units, problem_count)
-        node_inputs, matrix_inputs, answers, attn_answers = params
+            if len(attentions.shape) == 4:
+                attentions = attentions[:, 0, :, :]  # attention of head 0
 
-        model, model_attn = self.make_simple_attention_network(
-                                node_count, feature_size, feature_units,
-                                return_attention=True)
+            loss, hit_prob = self.calculate_attention_loss(
+                                attentions, attn_answers)
+            losses.append(loss)
+            hit_probs.append(hit_prob)
 
-        model_attn.compile(loss="mse", optimizer="adam")
-        metrics = model_attn.fit([node_inputs, matrix_inputs], attn_answers,
-                                 validation_split=0.3, epochs=10)
-        last_loss = metrics.history["val_loss"][-1]
-        self.assertLess(last_loss, 1e-1)
+        loss = np.mean(losses)
+        hit_prob = np.mean(hit_probs)
+        if header:
+            print(header)
+        print("\t loss: {}(+/-{}), hit_prob:{} (+/-{}).".format(
+            loss, np.std(losses), hit_prob, np.std(hit_prob)))
+        return loss, hit_prob
 
     def make_problems(self, node_count, feature_size, feature_units,
                       problem_count):
@@ -143,7 +164,11 @@ class TestGraphAttentionLayer(unittest.TestCase):
             mask = 10e9 * (1.0 - m)
             target_index = np.argmin(distance * m + mask, axis=1)
 
-            answers.append(n[target_index])
+            if feature_size == feature_units:
+                answers.append(n[target_index])
+            else:
+                answers.append(n[target_index][:, :feature_units])
+
             attn = np.zeros(m.shape)
             attn[np.arange(len(attn)), target_index] = 1
             attention_answers.append(attn)
@@ -155,23 +180,28 @@ class TestGraphAttentionLayer(unittest.TestCase):
 
     def make_graph_attention_network(self, node_count,
                                      feature_size, feature_units,
-                                     head=1, merge="concat",
-                                     return_attention=False):
+                                     head=1, merge="average",
+                                     return_attention=False,
+                                     before=False):
 
         nodes = K.layers.Input(shape=(node_count, feature_size))
         matrix = K.layers.Input(shape=(node_count, node_count))
-        layer = GraphAttentionLayer(feature_units=feature_units,
-                                    attn_heads=head,
-                                    attn_heads_reduction=merge,
-                                    return_attention=return_attention)
+
+        if before:
+            GAL = GraphAttentionLayerB
+        else:
+            GAL = GraphAttentionLayer
+
+        layer = GAL(feature_units=feature_units,
+                    attn_heads=head,
+                    attn_heads_reduction=merge,
+                    dropout_rate=0.0,
+                    return_attention=return_attention)
 
         if return_attention:
             output, attn = layer([nodes, matrix])
         else:
             output = layer([nodes, matrix])
-
-        if feature_size != feature_units:
-            output = K.layers.Dense(feature_size)(output)
 
         model = K.models.Model(inputs=[nodes, matrix], outputs=output)
         if return_attention:
@@ -196,9 +226,6 @@ class TestGraphAttentionLayer(unittest.TestCase):
             attn = attn
         else:
             output = layer([nodes, matrix])
-
-        if feature_size != feature_units:
-            output = K.layers.Dense(feature_size)(output)
 
         model = K.models.Model(inputs=[nodes, matrix], outputs=output)
         if return_attention:

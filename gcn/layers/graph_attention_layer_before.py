@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import InputSpec
 from tensorflow.python.keras import initializers, regularizers, constraints
-from tensorflow.python.keras.layers import Dense, Dropout
+from tensorflow.python.keras.layers import Dense, Dropout, LeakyReLU
 
 
 class GraphAttentionLayer(Dense):
@@ -49,11 +49,9 @@ class GraphAttentionLayer(Dense):
         self.supports_masking = False
 
         # Populated by build()
-        self.kernels = []
-        self.biases = []
-        self.neighbor_kernels = []
-        self.attn_kernels = []
-        self.attention_biases = []
+        self.kernels = []       # Layer kernels for attention heads
+        self.biases = []        # Layer biases for attention heads
+        self.attn_kernels = []  # Attention kernels for attention heads
 
         if attn_heads_reduction == "concat":
             # Output will have shape (..., K * F")
@@ -67,7 +65,7 @@ class GraphAttentionLayer(Dense):
         assert len(X_dims) == 3
         assert len(A_dims) == 3 and A_dims[1] == A_dims[2]
 
-        _, N, F = X_dims
+        F = X_dims[-1]
 
         # Initialize weights for each attention head
         for head in range(self.attn_heads):
@@ -81,7 +79,7 @@ class GraphAttentionLayer(Dense):
 
             # Layer bias
             if self.use_bias:
-                bias = self.add_weight(shape=(self.units,),
+                bias = self.add_weight(shape=(self.units, ),
                                        initializer=self.bias_initializer,
                                        regularizer=self.bias_regularizer,
                                        constraint=self.bias_constraint,
@@ -92,42 +90,26 @@ class GraphAttentionLayer(Dense):
                 continue
 
             # Attention kernels
-            neighbor_kernel = self.add_weight(
-                                    shape=(F, self.units),
-                                    initializer=self.kernel_initializer,
-                                    regularizer=self.kernel_regularizer,
-                                    constraint=self.kernel_constraint,
-                                    name="kernel_neighbor_{}".format(head))
-
-            attn_kernel = self.add_weight(
+            attn_kernel_self = self.add_weight(
                                     shape=(self.units, 1),
                                     initializer=self.attn_kernel_initializer,
                                     regularizer=self.attn_kernel_regularizer,
                                     constraint=self.attn_kernel_constraint,
-                                    name="attn_kernel_{}".format(head))
+                                    name="attn_kernel_self_{}".format(head),)
+            attn_kernel_neighs = self.add_weight(
+                                    shape=(self.units, 1),
+                                    initializer=self.attn_kernel_initializer,
+                                    regularizer=self.attn_kernel_regularizer,
+                                    constraint=self.attn_kernel_constraint,
+                                    name="attn_kernel_neigh_{}".format(head))
 
-            self.neighbor_kernels.append(neighbor_kernel)
-            self.attn_kernels.append(attn_kernel)
-
-            if self.use_bias:
-                """
-                bias = self.add_weight(shape=(1, ),
-                                       initializer=self.bias_initializer,
-                                       regularizer=self.bias_regularizer,
-                                       constraint=self.bias_constraint,
-                                       name="bias_attn_{}".format(head))
-                self.attention_biases.append(bias)
-                """
-                pass
+            self.attn_kernels.append([attn_kernel_self, attn_kernel_neighs])
 
         self.built = True
 
     def call(self, inputs):
         X = inputs[0]  # Node features (B x N x F)
         A = inputs[1]  # Adjacency matrix (B x N x N)
-
-        X_dims = X.get_shape().as_list()
-        B, N, F = X_dims
 
         outputs = []
         attentions = []
@@ -144,35 +126,43 @@ class GraphAttentionLayer(Dense):
                 node_features = tf.matmul(attention, dropout_feat)  # (N x F")
             else:
                 # Attention kernel a in the paper (2F" x 1)
-                neighbor_kernel = self.neighbor_kernels[head]
                 attention_kernel = self.attn_kernels[head]
-                # attention_bias = self.attention_biases[head]
 
-                neighbor_features = K.dot(X, neighbor_kernel)
+                # Compute feature combinations
+                # Note: [[a_1], [a_2]]^T [[Wh_i], [Wh_2]]
+                #       = [a_1]^T [Wh_i] + [a_2]^T [Wh_j]
+                # Both (B x N x 1)
+                attn_for_self = K.dot(features, attention_kernel[0])
+                attn_for_neighs = K.dot(features, attention_kernel[1])
 
-                feature_self = K.repeat_elements(features, N, axis=2)
-                feature_self = K.reshape(feature_self, (-1, N, N, self.units))
+                # Attention head a(Wh_i, Wh_j) = a^T [[Wh_i], [Wh_j]]
+                # attention becomes (B x N x N) via broadcasting
+                attention = attn_for_self + tf.transpose(attn_for_neighs,
+                                                         (0, 2, 1))
 
-                feature_neighbor = K.repeat_elements(neighbor_features, N, axis=2)
-                feature_neighbor = K.reshape(feature_neighbor, (-1, N, N, self.units))
+                # Add nonlinearty (alpha=0.2 is tensorflow default)
+                attention = LeakyReLU(alpha=0.2)(attention)
 
-                merged = feature_self + tf.transpose(feature_neighbor, (0, 2, 1, 3))
-                attention = K.dot(tf.nn.tanh(merged), attention_kernel)
-                attention = K.reshape(attention, (-1, N, N))
-                if self.use_bias:
-                    # attention = K.bias_add(attention, attention_bias)
-                    pass
-
+                # Mask values before activation (Vaswani et al., 2017)
                 mask = -10e9 * (1.0 - A)
                 attention += mask
 
-                attention = tf.nn.softmax(attention)
-                dropout_attn = Dropout(self.dropout_rate)(attention)
+                # Apply softmax to get attention coefficients
+                attention = K.softmax(attention)  # (B x N x N)
 
-                node_features = tf.matmul(dropout_attn, dropout_feat)
+                # Apply dropout to features and attention coefficients
+                dropout_attn = Dropout(self.dropout_rate)(attention)  # (B x N x N)
+
+                # Linear combination with neighbors" features
+                # (B x N x F")
+                node_features = tf.matmul(dropout_attn, dropout_feat)  # (N x F")
 
             if self.use_bias:
                 node_features = K.bias_add(node_features, self.biases[head])
+
+            if self.attn_heads_reduction == "concat":
+                # If "concat", compute the activation here (Eq. 5)
+                node_features = self.activation(node_features)
 
             if self.return_attention:
                 attentions.append(attention)
