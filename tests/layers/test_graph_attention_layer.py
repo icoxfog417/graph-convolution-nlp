@@ -102,6 +102,26 @@ class TestGraphAttentionLayer(unittest.TestCase):
         print("loss: {}, hit_prob: {}".format(loss, hit_prob))
         self.assertTrue(loss < 0.1)
 
+    def test_attention_learning(self):
+        node_count = 10
+        feature_size = 1
+        feature_units = 1
+        problem_count = 30000
+
+        params = self.make_problems(node_count, feature_size,
+                                    feature_units, problem_count)
+        node_inputs, matrix_inputs, answers, attn_answers = params
+
+        model, model_attn = self.make_simple_attention_network(
+                                node_count, feature_size, feature_units,
+                                return_attention=True)
+
+        model_attn.compile(loss="mse", optimizer="adam")
+        metrics = model_attn.fit([node_inputs, matrix_inputs], attn_answers,
+                                 validation_split=0.3, epochs=10)
+        last_loss = metrics.history["val_loss"][-1]
+        self.assertLess(last_loss, 1e-1)
+
     def make_problems(self, node_count, feature_size, feature_units,
                       problem_count):
         """

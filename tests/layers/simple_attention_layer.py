@@ -10,13 +10,21 @@ class SimpleAttentionLayer(Dense):
                  feature_units,
                  activation="relu",
                  return_attention=False,
+                 node_axis="row",
+                 merge_method="add",
+                 use_attention_kernel=True,
                  **kwargs):
 
         super(SimpleAttentionLayer, self).__init__(units=feature_units,
                                                    activation=activation,
                                                    **kwargs)
+        if merge_method == "concat" and not use_attention_kernel:
+            raise Exception("Can't use concat without attention")
 
         self.return_attention = return_attention
+        self.node_axis = node_axis
+        self.merge_method = merge_method
+        self.use_attention_kernel = use_attention_kernel
         self.input_spec = [InputSpec(ndim=3), InputSpec(ndim=3)]
         self.supports_masking = False
 
@@ -34,12 +42,21 @@ class SimpleAttentionLayer(Dense):
         N = X_dims[1]
 
         for kind in ["self", "neighbor", "attention"]:
-            if kind == "self":
-                shape = (F, self.units)
-            elif kind == "neighbor":
-                shape = (F, self.units)
+            if kind in ["self", "neighbor"]:
+                if self.use_attention_kernel:
+                    shape = (F, self.units)
+                else:
+                    shape = (F, 1)
+            elif kind == "attention" and self.use_attention_kernel:
+                if self.merge_method == "concat":
+                    shape = (self.units * 2, 1)
+                else:
+                    shape = (self.units, 1)
             else:
-                shape = (self.units, 1)
+                shape = ()
+
+            if len(shape) == 0:
+                continue
 
             kernel = self.add_weight(shape=shape,
                                      initializer=self.kernel_initializer,
@@ -51,7 +68,7 @@ class SimpleAttentionLayer(Dense):
                 self.self_kernel = kernel
             elif kind == "neighbor":
                 self.neighbor_kernel = kernel
-            else:
+            elif kind == "attention":
                 self.attention_kernel = kernel
 
         if self.use_bias:
@@ -68,21 +85,57 @@ class SimpleAttentionLayer(Dense):
         A = inputs[1]  # Adjacency matrix (B x N x N)
 
         X_dims = X.get_shape().as_list()
-        batch_size, node_count, feature_size = X_dims
+        B, N, F = X_dims
 
         feature_self = K.dot(X, self.self_kernel)
         feature_neighbor = K.dot(X, self.neighbor_kernel)
 
-        feature_self = K.repeat_elements(feature_self, node_count, axis=2)
-        feature_self = K.reshape(feature_self, (-1, node_count, node_count, self.units))
+        # repeat_elements is same as np.repeat.
+        # it repeats element to row direction.
+        # Example.
+        #  z = np.array([[1,2,3],[4,5,6]])  # shape=(2, 3)
+        #  repeat = 4
+        #  np.reshape(np.repeat(z, repeat, axis=-1), (2, 3, repeat))
+        #  > array([[[1, 1, 1, 1],
+        #          [2, 2, 2, 2],
+        #          [3, 3, 3, 3]],
+        #         [[4, 4, 4, 4],
+        #          [5, 5, 5, 5],
+        #          [6, 6, 6, 6]]])
+        feature_self = K.repeat_elements(feature_self, N, axis=2)
+        feature_self = K.reshape(feature_self, (-1, N, N, self.units))
 
-        feature_neighbor = K.repeat_elements(feature_neighbor, node_count, axis=2)
-        feature_neighbor = K.reshape(feature_neighbor, (-1, node_count, node_count, self.units))
+        feature_neighbor = K.repeat_elements(feature_neighbor, N, axis=2)
+        feature_neighbor = K.reshape(feature_neighbor, (-1, N, N, self.units))
 
-        additive = feature_self + tf.transpose(feature_neighbor, (0, 2, 1, 3))
+        T = (0, 2, 1, 3)
+        if self.merge_method == "concat":
+            if self.node_axis == "row":
+                merged = tf.concat([feature_self,
+                                    tf.transpose(feature_neighbor, T)],
+                                   axis=-1)
+            else:
+                merged = tf.concat([tf.transpose(feature_self, T),
+                                    feature_neighbor],
+                                   axis=-1)
+        else:
+            if self.node_axis == "row":
+                merged = feature_self + tf.transpose(feature_neighbor, T)
+            else:
+                merged = tf.transpose(feature_self, T) + feature_neighbor
 
-        attention = K.dot(tf.nn.tanh(additive), self.attention_kernel)
-        attention = K.reshape(attention, (-1, node_count, node_count))
+        activation_func = tf.nn.tanh
+        if self.use_attention_kernel:
+            attention = K.dot(activation_func(merged), self.attention_kernel)
+        else:
+            attention = activation_func(merged)
+
+        """
+        print([self.merge_method, self.node_axis, self.use_attention_kernel])
+        print(merged.shape)
+        print(attention.shape)
+        """
+        attention = K.reshape(attention, (-1, N, N))
         if self.use_bias:
             attention = K.bias_add(attention, self.bias)
 
