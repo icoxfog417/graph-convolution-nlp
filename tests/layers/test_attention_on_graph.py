@@ -18,6 +18,7 @@ class TestAttentionOnGraph(unittest.TestCase):
         for acc in [exp2, exp3, exp4, exp5, exp6]:
             # original method should be most accurate
             self.assertGreater(exp1, acc)
+        raise Exception("ex")
 
     def run_attention_learning(self, node_axis, merge_method,
                                use_attention_kernel):
@@ -42,7 +43,7 @@ class TestAttentionOnGraph(unittest.TestCase):
             node_inputs, matrix_inputs, answers, attn_answers = params
 
             metrics = model.fit([node_inputs, matrix_inputs], attn_answers,
-                                validation_split=0.2, epochs=8)
+                                validation_split=0.2, epochs=8, verbose=0)
             acc = metrics.history["val_acc"][-1]
             last_accs.append(acc)
 

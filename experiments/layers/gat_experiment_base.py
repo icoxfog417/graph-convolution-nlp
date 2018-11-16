@@ -3,14 +3,6 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
 import numpy as np
 import scipy.sparse as sp
-
-# Disable TensorFlow GPU to avoid memory error
-if os.name == "nt":
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-else:
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 import tensorflow as tf
 from tensorflow.python import keras as K
 from chariot.storage import Storage

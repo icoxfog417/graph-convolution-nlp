@@ -130,11 +130,6 @@ class SimpleAttentionLayer(Dense):
         else:
             attention = activation_func(merged)
 
-        """
-        print([self.merge_method, self.node_axis, self.use_attention_kernel])
-        print(merged.shape)
-        print(attention.shape)
-        """
         attention = K.reshape(attention, (-1, N, N))
         if self.use_bias:
             attention = K.bias_add(attention, self.bias)

@@ -100,7 +100,7 @@ class GraphAttentionLayer(Dense):
                                     name="kernel_neighbor_{}".format(head))
 
             attn_kernel = self.add_weight(
-                                    shape=(self.units, 1),
+                                    shape=(self.units, self.units),
                                     initializer=self.attn_kernel_initializer,
                                     regularizer=self.attn_kernel_regularizer,
                                     constraint=self.attn_kernel_constraint,
@@ -108,18 +108,6 @@ class GraphAttentionLayer(Dense):
 
             self.neighbor_kernels.append(neighbor_kernel)
             self.attn_kernels.append(attn_kernel)
-
-            if self.use_bias:
-                biases = []
-                for kind in ["self", "neigbor"]:
-                    name = "bias_attn_{}_{}".format(kind, head)
-                    bias = self.add_weight(shape=(N,),
-                                           initializer=self.bias_initializer,
-                                           regularizer=self.bias_regularizer,
-                                           constraint=self.bias_constraint,
-                                           name=name)
-                    biases.append(bias)
-                self.attention_biases.append(biases)
 
         self.built = True
 
@@ -140,35 +128,24 @@ class GraphAttentionLayer(Dense):
             features = K.dot(X, kernel)  # (B x N x F")
             dropout_feat = Dropout(self.dropout_rate)(features)  # (B x N x F")
 
-            if not self.attention:
-                attention = A
-                node_features = tf.matmul(attention, dropout_feat)  # (N x F")
-            else:
-                # Attention kernel a in the paper (2F" x 1)
-                neighbor_kernel = self.neighbor_kernels[head]
-                attn_kernel = self.attn_kernels[head]
+            neighbor_kernel = self.neighbor_kernels[head]
+            attn_kernel = self.attn_kernels[head]
 
-                neighbor_features = K.dot(X, neighbor_kernel)
+            neighbor_features = K.dot(X, neighbor_kernel)
+            dropout_neighbor = Dropout(self.dropout_rate)(neighbor_features)
 
-                attn_self = K.dot(features, attn_kernel)
-                attn_neighbor = K.dot(neighbor_features, attn_kernel)
+            merged = tf.matmul(K.dot(dropout_feat, attn_kernel),
+                               tf.transpose(dropout_neighbor, (0, 2, 1)))
+            attention = tf.nn.tanh(merged)
+            attention = K.reshape(attention, (-1, N, N))
 
-                if self.use_bias:
-                    self_attn_bias, neigbor_attn_bias = self.attention_biases[head]
-                    attn_self = K.bias_add(attn_self, self_attn_bias)
-                    attn_neighbor = K.bias_add(attn_neighbor, neigbor_attn_bias)
+            mask = -10e9 * (1.0 - A)
+            attention += mask
 
-                attention = attn_neighbor + tf.transpose(attn_self, (0, 2, 1))
-                attention = tf.nn.tanh(attention)
-                attention = K.reshape(attention, (-1, N, N))
+            attention = tf.nn.softmax(attention)
+            dropout_attn = Dropout(self.dropout_rate)(attention)
 
-                mask = -10e9 * (1.0 - A)
-                attention += mask
-
-                attention = tf.nn.softmax(attention)
-                dropout_attn = Dropout(self.dropout_rate)(attention)
-
-                node_features = tf.matmul(dropout_attn, dropout_feat)
+            node_features = tf.matmul(dropout_attn, dropout_feat)
 
             if self.use_bias:
                 node_features = K.bias_add(node_features, self.biases[head])
