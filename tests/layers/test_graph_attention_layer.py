@@ -9,7 +9,7 @@ from gcn.layers.graph_attention_layer import GraphAttentionLayer
 class TestGraphAttentionLayer(unittest.TestCase):
     TEST_PATTERN = (10, 2, 2)
 
-    def xtest_forward(self):
+    def test_forward(self):
         node_count = 12
         feature_size = 10
         feature_units = 8
@@ -40,7 +40,7 @@ class TestGraphAttentionLayer(unittest.TestCase):
         self.assertEqual(outputs.shape, (batch_size, node_count,
                                          feature_units))
 
-    def xtest_training(self):
+    def test_training(self):
         node_count = 4
         feature_size = 3
         feature_units = 1
@@ -78,7 +78,7 @@ class TestGraphAttentionLayer(unittest.TestCase):
 
         self.assertGreater(hit_prob, 0.7)
 
-    def xtest_attention_before(self):
+    def test_attention_before(self):
         node_count, feature_size, feature_units = self.TEST_PATTERN
 
         def make_model():
@@ -93,7 +93,7 @@ class TestGraphAttentionLayer(unittest.TestCase):
                                               header="GAL Before")
         self.assertGreater(hit_prob, 0.7)
 
-    def xtest_attention_theoretical(self):
+    def test_attention_theoretical(self):
         node_count, feature_size, feature_units = self.TEST_PATTERN
 
         def make_model():
