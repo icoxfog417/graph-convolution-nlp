@@ -16,7 +16,7 @@ class TestTrainer(unittest.TestCase):
 
     def test_build(self):
         root = os.path.join(os.path.dirname(__file__), "../../")
-        trainer = Trainer(root, preprocessor_name="test_preprocessor")
+        trainer = Trainer(root, preprocessor_name="test_lm_preprocessor")
 
         trainer.build("valid")
         self.assertTrue(len(trainer.preprocessor.vocabulary.get()) > 1000)
@@ -26,7 +26,8 @@ class TestTrainer(unittest.TestCase):
 
     def test_train(self):
         root = os.path.join(os.path.dirname(__file__), "../../")
-        trainer = Trainer(root, preprocessor_name="test_train_preprocessor", log_dir="test")
+        trainer = Trainer(root, preprocessor_name="test_train_lm_preprocessor",
+                          log_dir="lm_test")
         trainer.build("valid")
 
         vocab_size = len(trainer.preprocessor.vocabulary.get())
