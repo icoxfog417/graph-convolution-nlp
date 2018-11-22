@@ -106,3 +106,4 @@ venv.bak/
 .vscode/
 data/
 !gcn/data/
+!tests/data/
