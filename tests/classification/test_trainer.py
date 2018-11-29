@@ -2,16 +2,9 @@ import os
 import shutil
 import unittest
 from gcn.classification.trainer import Trainer
-from gcn.language_model.baseline import LSTMLM
-
+from gcn.classification.baseline import LSTMClassifier
 
 class TestTrainer(unittest.TestCase):
-
-    def test_download(self):
-        root = os.path.join(os.path.dirname(__file__), "../../")
-        trainer = Trainer(root)
-        r = trainer.download()
-        self.assertTrue(r)
 
     def test_build(self):
         root = os.path.join(os.path.dirname(__file__), "../../")
@@ -24,4 +17,12 @@ class TestTrainer(unittest.TestCase):
         os.remove(trainer.preprocessor_path)
 
     def test_train(self):
-        pass
+        root = os.path.join(os.path.dirname(__file__), "../../")
+        trainer = Trainer(root, preprocessor_name="test_tc_preprocessor")
+        trainer.build()
+
+        vocab_size = len(trainer.preprocessor.vocabulary.get())
+        model = LSTMClassifier(vocab_size)
+        model.build(trainer.num_classes)
+
+        metrics = trainer.train(model.model, epochs=2)

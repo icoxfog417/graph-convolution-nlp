@@ -14,13 +14,16 @@ class MultiNLIDataset():
         self.max_word_count = max_word_count
         self.prefix = prefix
 
-    @property
     def train_data(self):
         return pd.read_csv(self.processed_file("train"))
 
-    @property
     def test_data(self):
         return pd.read_csv(self.processed_file("test"))
+
+    @classmethod
+    def labels(self):
+        return ["fiction", "government", "slate", "telephone", "travel",
+                "nineeleven", "facetoface", "letters", "oup", "verbatim"]
 
     def download(self):
         download_dir = self.storage.data_path("raw")
@@ -31,7 +34,10 @@ class MultiNLIDataset():
             data = self._merge_data(matched, mismatched, kind)
             data.to_csv(self.interim_file(kind))
             preprocessed = self.preprocess(data)
-            preprocessed.to_csv(self.processed_file(kind))
+            preprocessed = pd.concat([preprocessed["text"],
+                                      preprocessed["label"]], axis=1)
+            preprocessed.to_csv(self.processed_file(kind), index=False)
+        return self
 
     def interim_file(self, kind):
         if self.prefix:
@@ -64,6 +70,10 @@ class MultiNLIDataset():
         min_count = limited["label"].value_counts().min()
         selected = limited.groupby("label").apply(lambda x: x.sample(n=min_count))
         selected = selected.drop(columns=["label", "index"]).reset_index()
+
+        # Convert label to index
+        selected["label"] = selected["label"].apply(
+                                lambda x: self.labels().index(x))
 
         return selected
 

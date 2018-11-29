@@ -1,72 +1,49 @@
-from tensorflow.python import keras as K
 import numpy as np
 import pandas as pd
-from sklearn.externals import joblib
-import chazutsu
+from tensorflow.python import keras as K
 import chariot.transformer as ct
-from chariot.feeder import LanguageModelFeeder
+from chariot.feeder import Feeder
+from chariot.transformer.formatter import Padding
 from gcn.base_trainer import BaseTrainer
-from gcn.metrics import perplexity
+from gcn.data.multi_nli_dataset import MultiNLIDataset
 
 
 class Trainer(BaseTrainer):
 
     def download(self):
-        download_dir = self.storage.data_path("raw")
-        matched = chazutsu.datasets.MultiNLI.matched().download(download_dir)
-        mismatched = chazutsu.datasets.MultiNLI.mismatched().download(download_dir)
-        return (matched, mismatched)
+        r = MultiNLIDataset(self.storage.root).download()
+        return r
 
     @property
-    def train_data(self):
-        return self._merge_data("train")
-
-    @property
-    def test_data(self):
-        return self._merge_data("test")
-
-    def _merge_data(self, kind="train"):
-        m, mm = self.download()
-        datasets = []
-        for d in [m, mm]:
-            if kind == "train":
-                _d = d.dev_data()
-            else:
-                _d = d.test_data()
-
-            df = pd.concat([_d["sentence1"], _d["genre"]], axis=1)
-            datasets.append(df)
-        df = pd.concat(datasets).reset_index()
-        df.rename(columns={"sentence1": "text", "genre": "label"}, inplace=True)
-        return df
+    def num_classes(self):
+        return len(MultiNLIDataset.labels())
 
     def build(self, data_kind="train", save=True):
-        if not self._built:
-            self.load_preprocessor()
-        if self._built:
-            print("Load existing preprocessor at {}.".format(
-                self.preprocessor_path))
-            return 0
-
-        data = self.train_data()["text"]
-        print("Building Dictionary from {} data...".format(data_kind))
-        self.preprocessor.fit(data)
-        if save:
-            joblib.dump(self.preprocessor, self.preprocessor_path)
-        self._built = True
-        print("Done!")
+        super().build(data_kind, "text", save)
 
     def train(self, model, data_kind="train", lr=1e-3,
-              batch_size=20, sequence_length=35, epochs=40):
-        if not self.__built:
+              batch_size=20, sequence_length=25, epochs=40):
+        if not self._built:
             raise Exception("Trainer's preprocessor is not built.")
 
         r = self.download()
-        step_generators = {"train": {}, "valid": {}}
+
+        feeder = Feeder({"text": [
+                            self.preprocessor,
+                            Padding.from_(
+                                self.preprocessor,
+                                length=sequence_length)
+                        ]})
+
+        train_data = feeder.transform(r.train_data())
+        test_data = feeder.transform(r.test_data())
 
         # Set optimizer
         model.compile(loss="sparse_categorical_crossentropy",
                       optimizer=K.optimizers.Adam(lr=lr),
-                      metrics=["accuracy", perplexity])
+                      metrics=["accuracy"])
 
-        pass
+        model.fit(train_data["text"], train_data["label"],
+                  validation_data=(test_data["text"], test_data["label"]),
+                  batch_size=batch_size,
+                  epochs=epochs)

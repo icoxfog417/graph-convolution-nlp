@@ -61,7 +61,7 @@ class BaseTrainer():
     def download(self):
         raise Exception("You have to specify what kinds of data you use.")
 
-    def build(self, data_kind="train", save=True):
+    def build(self, data_kind="train", field="", save=True):
         if not self._built:
             self.load_preprocessor()
         if self._built:
@@ -72,7 +72,11 @@ class BaseTrainer():
         r = self.download()
         data = r.train_data() if data_kind == "train" else r.valid_data()
         print("Building Dictionary from {} data...".format(data_kind))
-        self.preprocessor.fit(data)
+        if not field:
+            self.preprocessor.fit(data)
+        else:
+            self.preprocessor.fit(data[field])
+
         if save:
             joblib.dump(self.preprocessor, self.preprocessor_path)
         self._built = True

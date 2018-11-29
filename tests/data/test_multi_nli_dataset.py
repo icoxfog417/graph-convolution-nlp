@@ -10,8 +10,8 @@ class TestMultiNLIDataset(unittest.TestCase):
         dataset = MultiNLIDataset(root, prefix="test")
         dataset.download()
 
-        train_data = dataset.train_data
-        test_data = dataset.test_data
+        train_data = dataset.train_data()
+        test_data = dataset.test_data()
 
         for d in [train_data, test_data]:
             self.assertTrue(len(d) > 0)
