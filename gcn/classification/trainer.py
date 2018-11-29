@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from tensorflow.python import keras as K
 import chariot.transformer as ct
+from chariot.preprocess import Preprocess
 from chariot.feeder import Feeder
 from chariot.transformer.formatter import Padding
 from gcn.base_trainer import BaseTrainer
@@ -28,15 +29,8 @@ class Trainer(BaseTrainer):
 
         r = self.download()
 
-        feeder = Feeder({"text": [
-                            self.preprocessor,
-                            Padding.from_(
-                                self.preprocessor,
-                                length=sequence_length)
-                        ]})
-
-        train_data = feeder.transform(r.train_data())
-        test_data = feeder.transform(r.test_data())
+        train_data = self.preprocess(r.train_data(), sequence_length)
+        test_data = self.preprocess(r.test_data(), sequence_length)
 
         # Set optimizer
         model.compile(loss="sparse_categorical_crossentropy",
@@ -47,3 +41,15 @@ class Trainer(BaseTrainer):
                   validation_data=(test_data["text"], test_data["label"]),
                   batch_size=batch_size,
                   epochs=epochs)
+
+    def preprocess(self, data, length):
+        preprocess = Preprocess({
+            "text": self.preprocessor
+        })
+        feeder = Feeder({"text": Padding.from_(self.preprocessor,
+                                               length=length)})
+
+        _d = preprocess.transform(data)
+        _d = feeder.transform(_d)
+
+        return _d
