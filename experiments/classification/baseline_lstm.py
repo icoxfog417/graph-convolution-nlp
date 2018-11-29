@@ -19,7 +19,7 @@ def main():
     model = LSTMClassifier(vocab_size)
     model.build(trainer.num_classes)
 
-    metrics = trainer.train(model.model, epochs=10,
+    metrics = trainer.train(model.model, epochs=18,
                             sequence_length=length)
 
     test_data = trainer.preprocess(dataset.test_data(), length)

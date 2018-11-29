@@ -1,7 +1,6 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score
 from tensorflow.python import keras as K
 from gcn.util import gpu_enable
@@ -38,7 +37,8 @@ class LSTMClassifier():
         # Build the model
         model = K.Sequential()
         embedding = K.layers.Embedding(input_dim=self.vocab_size,
-                                       output_dim=self.embedding_size)
+                                       output_dim=self.embedding_size,
+                                       embeddings_regularizer=K.regularizers.l2())
         model.add(embedding)
         model.add(K.layers.Dropout(self.dropout))
         rnn_layer = K.layers.CuDNNLSTM if gpu_enable() else K.layers.LSTM

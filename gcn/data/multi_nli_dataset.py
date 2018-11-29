@@ -9,7 +9,7 @@ class MultiNLIDataset():
     def __init__(self, root, min_word_count=3, max_word_count=25,
                  prefix=""):
         self.storage = Storage(root)
-        self.nlp = spacy.load("en_core_web_sm", parser=False, entity=False)
+        self.nlp = spacy.load("en", parser=False, entity=False)
         self.min_word_count = min_word_count
         self.max_word_count = max_word_count
         self.prefix = prefix
@@ -61,7 +61,7 @@ class MultiNLIDataset():
 
         # Count words
         word_count = except_d["text"].apply(lambda x: len(self.nlp(x)))
-        except_d["word_count"] = word_count
+        except_d = except_d.assign(word_count=pd.Series(word_count).values)
 
         limited = except_d[(self.min_word_count <= except_d["word_count"]) &
                            (except_d["word_count"] <= self.max_word_count)]
