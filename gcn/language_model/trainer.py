@@ -1,3 +1,4 @@
+import sys
 from tensorflow.python import keras as K
 import numpy as np
 import chazutsu
@@ -8,6 +9,12 @@ from gcn.metrics import perplexity
 
 
 class Trainer(BaseTrainer):
+
+    def __init__(self, root="", lang=None, min_df=5, max_df=sys.maxsize,
+                 unknown="<unk>", preprocessor_name="preprocessor",
+                 log_dir=""):
+        super().__init__(root, lang, min_df, max_df, unknown,
+                         preprocessor_name, log_dir)
 
     def download(self):
         download_dir = self.storage.data_path("raw")

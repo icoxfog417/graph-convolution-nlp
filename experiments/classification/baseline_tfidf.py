@@ -15,7 +15,7 @@ def main():
     scores = classifier.fit(train_data["text"], train_data["label"])
 
     test_data = dataset.test_data()
-    y_pred = classifier.model.predict(test_data["text"])
+    y_pred = classifier.predict(test_data["text"])
 
     print(classification_report(test_data["label"], y_pred,
                                 target_names=dataset.labels()))

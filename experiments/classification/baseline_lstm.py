@@ -13,7 +13,7 @@ def main():
     dataset = MultiNLIDataset(root)
     trainer = Trainer(root, preprocessor_name="c_preprocessor_baseline")
     trainer.build()
-    length = 5
+    length = 25
 
     vocab_size = len(trainer.preprocessor.vocabulary.get())
     model = LSTMClassifier(vocab_size)
@@ -23,9 +23,9 @@ def main():
                             sequence_length=length)
 
     test_data = trainer.preprocess(dataset.test_data(), length)
-    y_pred = model.model.predict(test_data["text"])
+    y_pred = model.predict(test_data["text"])
 
-    print(classification_report(test_data["label"], np.argmax(y_pred, axis=1),
+    print(classification_report(test_data["label"], y_pred,
                                 target_names=dataset.labels()))
 
 

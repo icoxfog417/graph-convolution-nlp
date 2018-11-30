@@ -65,8 +65,8 @@ class BaseTrainer():
         if not self._built:
             self.load_preprocessor()
         if self._built:
-            print("Load existing preprocessor at {}.".format(
-                self.preprocessor_path))
+            print("Load existing preprocessor {}.".format(
+                os.path.basename(self.preprocessor_path)))
             return 0
 
         r = self.download()
