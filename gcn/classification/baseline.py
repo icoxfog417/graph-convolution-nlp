@@ -41,16 +41,16 @@ class LSTMClassifier():
         self.dropout = dropout
         self.model = None
 
-    def build(self, num_classes):
+    def build(self, num_classes, preprocessor=None):
+        self.preprocessor = preprocessor
         model = K.Sequential()
         embedding = K.layers.Embedding(input_dim=self.vocab_size,
                                        output_dim=self.embedding_size,
                                        embeddings_regularizer=K.regularizers.l2())
         model.add(embedding)
         model.add(K.layers.Dropout(self.dropout))
-        rnn_layer = K.layers.CuDNNLSTM if gpu_enable() else K.layers.LSTM
         for layer in range(self.layers):
-            model.add(rnn_layer(self.hidden_size))
+            model.add(K.layers.LSTM(self.hidden_size))
 
         model.add(K.layers.Dropout(self.dropout))
         model.add(K.layers.Dense(num_classes, activation="softmax"))
@@ -62,4 +62,5 @@ class LSTMClassifier():
         return np.argmax(preds, axis=1)
 
     def predict_proba(self, x):
-        return self.model.predict(x)
+        _x = x if self.preprocessor is None else self.preprocessor(x)
+        return self.model.predict(_x)

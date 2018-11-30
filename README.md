@@ -17,3 +17,6 @@ Research project to apply Graph Convolution to NLP.
   * [Fix to support batch data](https://medium.com/programming-soda/graph-attention-network-layer%E3%82%92%E5%AE%9F%E8%A3%85%E3%81%99%E3%82%8B-part1-4a199372b3de)
   * [Experiment by existing dataset](https://medium.com/programming-soda/graph-attention-network-layer%E3%82%92%E5%AE%9F%E8%A3%85%E3%81%99%E3%82%8B-part1-4a199372b3de)
   * [What is really effective attention method on Graph?](https://medium.com/programming-soda/graph-attention-network-layer%E3%82%92%E5%AE%9F%E8%A3%85%E3%81%99%E3%82%8B-part3-ce3548c3aa5c)
+* Graph Convolution for Text Classification
+  * [Prepare the Dataset](https://medium.com/programming-soda/graph-convolution%E3%81%A7%E8%87%AA%E7%84%B6%E8%A8%80%E8%AA%9E%E5%87%A6%E7%90%86%E3%82%92%E8%A1%8C%E3%81%86-%E3%83%86%E3%82%AD%E3%82%B9%E3%83%88%E5%88%86%E9%A1%9E%E7%B7%A8-part1-3eacc11eb622)
+  * [Make baseline model and analysis](https://medium.com/programming-soda/graph-convolution%E3%81%A7%E8%87%AA%E7%84%B6%E8%A8%80%E8%AA%9E%E5%87%A6%E7%90%86%E3%82%92%E8%A1%8C%E3%81%86-%E3%83%86%E3%82%AD%E3%82%B9%E3%83%88%E5%88%86%E9%A1%9E%E7%B7%A8-part2-b0f1f0a67b17)
