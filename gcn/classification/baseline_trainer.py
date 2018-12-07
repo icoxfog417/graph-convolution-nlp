@@ -1,22 +1,21 @@
+import numpy as np
 import pandas as pd
 from tensorflow.python import keras as K
+import chariot.transformer as ct
 from chariot.preprocess import Preprocess
 from chariot.feeder import Feeder
 from chariot.transformer.formatter import Padding
 from gcn.base_trainer import BaseTrainer
 from gcn.data.multi_nli_dataset import MultiNLIDataset
-from gcn.graph.dependency_graph import DependencyGraph
-from gcn.graph.similarity_graph import SimilarityGraph
 
 
-class Trainer(BaseTrainer):
+class BaselineTrainer(BaseTrainer):
 
     def __init__(self, root="", lang=None, min_df=1, max_df=1.0,
                  unknown="<unk>", preprocessor_name="preprocessor",
                  log_dir=""):
         super().__init__(root, lang, min_df, max_df, unknown,
                          preprocessor_name, log_dir)
-        self.graph_builder = None
 
     def download(self):
         r = MultiNLIDataset(self.storage.root).download()
@@ -26,25 +25,11 @@ class Trainer(BaseTrainer):
     def num_classes(self):
         return len(MultiNLIDataset.labels())
 
-    def build_dependency_graph_trainer(self, data_kind="train",
-                                       lang="en", save=True):
+    def build(self, data_kind="train", save=True):
         super().build(data_kind, "text", save)
-        vocab = self.preprocessor.vocabulary
-        self.graph_builder = DependencyGraph(lang, vocab)
 
-    def build_similarity_graph_trainer(self, data_kind="train",
-                                       nearest_neighbor=4, mode="connectivity",
-                                       representation="GloVe.6B.200d",
-                                       save=True):
-        super().build(data_kind, "text", save)
-        vocab = self.preprocessor.vocabulary
-        self.graph_builder = SimilarityGraph(vocab, nearest_neighbor,
-                                             mode, representation,
-                                             self.storage.root)
-
-    def train(self, model, data_kind="train",
-              lr=1e-3, batch_size=20, sequence_length=25, epochs=40,
-              verbose=2):
+    def train(self, model, data_kind="train", lr=1e-3,
+              batch_size=20, sequence_length=25, epochs=40, verbose=2):
         if not self._built:
             raise Exception("Trainer's preprocessor is not built.")
 
@@ -58,16 +43,14 @@ class Trainer(BaseTrainer):
                       optimizer=K.optimizers.Adam(lr=lr),
                       metrics=["accuracy"])
 
-        validation_data = ((test_data["text"], test_data["graph"]), test_data["label"])
-        metrics = model.fit((train_data["text"], train_data["graph"]),
-                            train_data["label"],
-                            validation_data=validation_data,
+        metrics = model.fit(train_data["text"], train_data["label"],
+                            validation_data=(test_data["text"], test_data["label"]),
                             batch_size=batch_size,
                             epochs=epochs, verbose=verbose)
 
         return metrics
 
-    def preprocess(self, data, length, graph_builder):
+    def preprocess(self, data, length):
         _data = data
         if isinstance(data, (list, tuple)):
             _data = pd.Series(data, name="text").to_frame()
@@ -81,8 +64,6 @@ class Trainer(BaseTrainer):
                                                length=length)})
 
         _data = preprocess.transform(_data)
-        graph = self.graph_builder.batch_build(_data["text"], length)
-        _data["graph"] = graph
         _data = feeder.transform(_data)
 
         return _data

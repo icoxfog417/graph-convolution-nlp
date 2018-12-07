@@ -6,57 +6,50 @@ from chariot.storage import Storage
 
 class SimilarityGraph():
 
-    def __init__(self, root="", graph_name="similarity_graph"):
+    def __init__(self, vocabulary, nearest_neighbor=4, mode="connectivity",
+                 representation="GloVe.6B.200d", root=""):
+        self.vocabulary = vocabulary
+        self.nearest_neighbor = nearest_neighbor
+        self.mode = mode
+        self.representation = representation
         default_root = os.path.join(os.path.dirname(__file__), "../../")
         _root = root if root else default_root
 
         self.storage = Storage(_root)
-        self.graph_name = graph_name
+        self.embedding = None
 
-    @property
-    def path(self):
-        path = "interim/{}.npy".format(self.graph_name)
-        return self.storage.data_path(path)
+    def build(self, sequence, size=-1):
+        if 0 < size < self.nearest_neighbor:
+            raise Exception("Matrix size is not enough for neighbors.")
 
-    def save(self, graph):
-        np.save(self.path, graph)
+        if self.embedding is None:
+            # download representation
+            self.storage.chakin(name=self.representation)
 
-    def load(self):
-        if os.path.exists(self.path):
-            return np.load(self.path)
-        else:
-            return None
+            # Make embedding matrix
+            file_path = "external/{}.txt".format(self.representation.lower())
+            self.embedding = self.vocabulary.make_embedding(
+                                self.storage.data_path(file_path))
 
-    def build(self, vocabulary,
-              representation="GloVe.6B.200d", nearest_neighbor=4,
-              mode="connectivity", save=True):
-        # download representation
-        self.storage.chakin(name=representation)
+        vectors = np.vstack([self.embedding[s] for s in sequence])
+        matrix = self._build(vectors, size)
+        return matrix
 
-        # Make embedding matrix
-        file_path = "external/{}.txt".format(representation.lower())
-        embedding = vocabulary.make_embedding(
-                        self.storage.data_path(file_path))
+    def _build(self, vectors, size=-1):
+        _size = size if size > 0 else len(vectors)
+        similarity = cosine_similarity(vectors[:_size])
+        similarity -= np.eye(_size)  # exclude similarity to self
+        top_k = np.argsort(-similarity, axis=1)[:, :self.nearest_neighbor]
 
-        graph = self._build(embedding, nearest_neighbor, mode)
-        if save:
-            self.save(graph)
-        return graph
-
-    def _build(self, vectors, nearest_neighbor, mode):
-        # Normalize embedding to emulate cosine similarity
-        # by euclidean distance
-        # https://cmry.github.io/notes/euclidean-v-cosine
-
-        similarity = cosine_similarity(vectors)
-        similarity -= np.eye(len(vectors))
-        top_k = np.argsort(-similarity, axis=1)[:, :nearest_neighbor]
-
-        matrix = np.zeros(similarity.shape)
+        matrix = np.zeros((_size, _size))
         for i, top in enumerate(top_k):
-            if mode == "connectivity":
+            if self.mode == "connectivity":
                 matrix[i, top] = 1
             else:
                 matrix[i, top] = similarity[i, top]
 
         return matrix
+
+    def batch_build(self, sequences, size=-1):
+        matrices = [self.build(s, size) for s in sequences]
+        return np.array(matrices)

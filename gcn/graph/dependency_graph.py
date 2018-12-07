@@ -7,10 +7,10 @@ class DependencyGraph():
     def __init__(self, lang, vocabulary):
         self.lang = lang
         self._parser = spacy.load(lang, disable=["ner", "textcat"])
-        self._vocabulary = vocabulary
+        self.vocabulary = vocabulary
 
     def build(self, sequence, size=-1):
-        words = self._vocabulary.inverse(sequence)
+        words = self.vocabulary.inverse(sequence)
         sentence = " ".join(words)  # have to consider non-space-separated lang
 
         _size = size if size > 0 else len(sequence)
