@@ -33,8 +33,8 @@ class Trainer(BaseTrainer):
         self.graph_builder = DependencyGraph(lang, vocab)
 
     def build_similarity_graph_trainer(self, data_kind="train",
-                                       nearest_neighbor=4, mode="connectivity",
-                                       representation="GloVe.6B.200d",
+                                       nearest_neighbor=3, mode="connectivity",
+                                       representation="GloVe.6B.100d",
                                        save=True):
         super().build(data_kind, "text", save)
         vocab = self.preprocessor.vocabulary
@@ -43,10 +43,19 @@ class Trainer(BaseTrainer):
                                              self.storage.root)
 
     def train(self, model, data_kind="train",
-              lr=1e-3, batch_size=20, sequence_length=25, epochs=40,
-              verbose=2):
+              lr=1e-3, batch_size=20, sequence_length=25, 
+              representation="GloVe.6B.100d",
+              epochs=40, verbose=2):
+
         if not self._built:
             raise Exception("Trainer's preprocessor is not built.")
+
+        if representation is not None:
+            self.storage.chakin(name=representation)
+            file_path = "external/{}.txt".format(representation.lower())
+            weights = [self.preprocessor.vocabulary.make_embedding(
+                                self.storage.data_path(file_path))]
+            model.get_layer("embedding").set_weights(weights)
 
         r = self.download()
 
@@ -67,7 +76,7 @@ class Trainer(BaseTrainer):
 
         return metrics
 
-    def preprocess(self, data, length, graph_builder):
+    def preprocess(self, data, length):
         _data = data
         if isinstance(data, (list, tuple)):
             _data = pd.Series(data, name="text").to_frame()

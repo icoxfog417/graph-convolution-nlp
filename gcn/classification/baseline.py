@@ -46,7 +46,8 @@ class LSTMClassifier():
         model = K.Sequential()
         embedding = K.layers.Embedding(input_dim=self.vocab_size,
                                        output_dim=self.embedding_size,
-                                       embeddings_regularizer=K.regularizers.l2())
+                                       embeddings_regularizer=K.regularizers.l2(),
+                                       name="embedding")
         model.add(embedding)
         model.add(K.layers.Dropout(self.dropout))
         for layer in range(self.layers):

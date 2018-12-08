@@ -1,32 +1,30 @@
 import os
 import sys
-import numpy as np
 from sklearn.metrics import classification_report
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
 from gcn.data.multi_nli_dataset import MultiNLIDataset
-from gcn.classification.baseline_trainer import BaselineTrainer
-from gcn.classification.baseline import LSTMClassifier
+from gcn.classification.trainer import Trainer
+from gcn.classification.graph_based_classifier import GraphBasedClassifier
 
 
 def main():
     root = os.path.join(os.path.dirname(__file__), "../../")
     dataset = MultiNLIDataset(root)
-    trainer = BaselineTrainer(root, log_dir="classifier_baseline")
-    trainer.build()
-    sequence_length = 25
+    trainer = Trainer(root, log_dir="classifier")
+    trainer.build_similarity_graph_trainer()
 
+    sequence_length = 25
     vocab_size = len(trainer.preprocessor.vocabulary.get())
 
     def preprocessor(x):
         _x = trainer.preprocess(x, sequence_length)
-        return _x["text"]
+        values = (_x["text"], _x["graph"])
+        return values
 
-    model = LSTMClassifier(vocab_size)
+    model = GraphBasedClassifier(vocab_size, sequence_length)
     model.build(trainer.num_classes, preprocessor)
 
-    metrics = trainer.train(model.model, epochs=25,
-                            sequence_length=sequence_length,
-                            representation="GloVe.6B.100d")
+    metrics = trainer.train(model.model, epochs=25)
 
     test_data = dataset.test_data()
     y_pred = model.predict(test_data["text"])

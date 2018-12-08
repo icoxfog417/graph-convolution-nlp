@@ -8,7 +8,7 @@ class GraphBasedClassifier():
 
     def __init__(self, vocab_size, graph_size,
                  embedding_size=100, hidden_size=100,
-                 head_types=("concat",), heads=3, dropout=0.5,
+                 head_types=("concat",), heads=1, dropout=0.5,
                  with_attention=True, with_lstm="before"):
 
         self.vocab_size = vocab_size
@@ -21,6 +21,7 @@ class GraphBasedClassifier():
         self.with_attention = with_attention
         self.with_lstm = with_lstm
         self.model = None
+        self._attention = None
 
     def build(self, num_classes, preprocessor=None):
         X_in = K.layers.Input(shape=(self.graph_size,))
@@ -34,10 +35,11 @@ class GraphBasedClassifier():
         vectors = embedding(X_in)
         _vectors = K.layers.Dropout(self.dropout)(vectors)
         if self.with_lstm == "before":
-            o, h, c = K.layers.LSTM(self.hidden_size, return_sequences=True,
-                                    return_state=True)(_vectors)
-            _vectors = c
+            o = K.layers.LSTM(self.hidden_size,
+                              return_sequences=True)(_vectors)
+            _vectors = o
 
+        attentions = []
         for ht in self.head_types:
             gh = GraphAttentionLayer(
                         feature_units=self.hidden_size,
@@ -46,8 +48,10 @@ class GraphBasedClassifier():
                         dropout_rate=self.dropout,
                         kernel_regularizer=K.regularizers.l2(),
                         attention=self.with_attention,
-                        attn_kernel_regularizer=K.regularizers.l2())
-            _vectors = gh([_vectors, A_in])
+                        attn_kernel_regularizer=K.regularizers.l2(),
+                        return_attention=True)
+            _vectors, attention = gh([_vectors, A_in])
+            attentions.append(attention)
 
         if self.with_lstm == "after":
             o, h, c = K.layers.LSTM(self.hidden_size, return_sequences=True,
@@ -58,6 +62,8 @@ class GraphBasedClassifier():
         probs = K.layers.Dense(num_classes, activation="softmax")(merged)
 
         self.model = K.models.Model(inputs=[X_in, A_in], outputs=probs)
+        self._attention = K.models.Model(inputs=[X_in, A_in],
+                                         outputs=attentions)
 
     def predict(self, x):
         preds = self.predict_proba(x)
@@ -66,3 +72,7 @@ class GraphBasedClassifier():
     def predict_proba(self, x):
         _x = x if self.preprocessor is None else self.preprocessor(x)
         return self.model.predict(_x)
+
+    def show_attention(self, x):
+        _x = x if self.preprocessor is None else self.preprocessor(x)
+        return self._attention.predict(_x)

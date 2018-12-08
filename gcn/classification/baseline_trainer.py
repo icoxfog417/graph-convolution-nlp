@@ -29,9 +29,19 @@ class BaselineTrainer(BaseTrainer):
         super().build(data_kind, "text", save)
 
     def train(self, model, data_kind="train", lr=1e-3,
-              batch_size=20, sequence_length=25, epochs=40, verbose=2):
+              batch_size=20, sequence_length=25,
+              representation="GloVe.6B.100d",
+              epochs=40, verbose=2):
+
         if not self._built:
             raise Exception("Trainer's preprocessor is not built.")
+
+        if representation is not None:
+            self.storage.chakin(name=representation)
+            file_path = "external/{}.txt".format(representation.lower())
+            weights = [self.preprocessor.vocabulary.make_embedding(
+                                self.storage.data_path(file_path))]
+            model.get_layer("embedding").set_weights(weights)
 
         r = self.download()
 

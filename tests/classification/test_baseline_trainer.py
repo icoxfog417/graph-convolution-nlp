@@ -26,3 +26,4 @@ class TestBaselineTrainer(unittest.TestCase):
         model.build(trainer.num_classes)
 
         metrics = trainer.train(model.model, epochs=2)
+        self.assertTrue(metrics.history["acc"][-1] - metrics.history["acc"][0] > 0)

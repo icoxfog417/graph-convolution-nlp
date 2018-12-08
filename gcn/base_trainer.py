@@ -34,8 +34,12 @@ class BaseTrainer():
 
     @property
     def preprocessor_path(self):
-        path = "interim/{}.pkl".format(self.preprocessor_name)
-        return self.storage.data_path(path)
+        if self._base_log_dir:
+            path = self._log_dir + "/{}.pkl".format(self.preprocessor_name)
+            return self.storage.data_path(path)
+        else:
+            path = "interim/{}.pkl".format(self.preprocessor_name)
+            return self.storage.data_path(path)
 
     @property
     def _log_dir(self):

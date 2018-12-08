@@ -38,7 +38,7 @@ class SimilarityGraph():
     def _build(self, vectors, size=-1):
         _size = size if size > 0 else len(vectors)
         similarity = cosine_similarity(vectors[:_size])
-        similarity -= np.eye(_size)  # exclude similarity to self
+        similarity -= np.eye(similarity.shape[0])  # exclude similarity to self
         top_k = np.argsort(-similarity, axis=1)[:, :self.nearest_neighbor]
 
         matrix = np.zeros((_size, _size))

@@ -7,8 +7,7 @@ from gcn.language_model.baseline import LSTMLM
 
 def main():
     root = os.path.join(os.path.dirname(__file__), "../../")
-    trainer = Trainer(root, preprocessor_name="baseline_preprocessor_test",
-                      log_dir="baseline_test")
+    trainer = Trainer(root, preprocessor_name="baseline_preprocessor_test")
     trainer.build(data_kind="valid")
     vocab_size = len(trainer.preprocessor.vocabulary.get())
     print("vocab size: {}".format(vocab_size))
