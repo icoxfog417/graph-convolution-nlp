@@ -6,7 +6,7 @@ from chariot.storage import Storage
 
 class SimilarityGraph():
 
-    def __init__(self, vocabulary, nearest_neighbor=4, mode="connectivity",
+    def __init__(self, vocabulary, nearest_neighbor=4, mode="similarity",
                  representation="GloVe.6B.100d", root=""):
         self.vocabulary = vocabulary
         self.nearest_neighbor = nearest_neighbor

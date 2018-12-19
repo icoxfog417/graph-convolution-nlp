@@ -26,6 +26,26 @@ class TestDependencyGraph(unittest.TestCase):
         self.assertEqual(tuple(matrix.tolist()),
                          tuple(answer.tolist()))
 
+    def test_build_label(self):
+        sentence = "I am living at house"
+        vocab = Vocabulary()
+        vocab.set(sentence.split())
+
+        graph = DependencyGraph("en", vocab)
+
+        sequence = vocab.transform([sentence.split()])[0]
+        matrix = graph.build(sequence, return_label=True)
+
+        answer = [
+            ["", "", "nsubj", "", ""],
+            ["", "", "aux", "", ""],
+            ["", "", "ROOT", "", ""],
+            ["", "", "prep", "", ""],
+            ["", "", "", "pobj", ""],
+        ]
+        self.assertEqual(tuple(matrix),
+                         tuple(answer))
+
     def test_batch_build(self):
         sentences = ["I am living at house",
                      "You are waiting on the station"]
