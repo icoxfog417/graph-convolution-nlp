@@ -1,6 +1,7 @@
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
+from gcn.graph.dependency_graph import DependencyGraph
 
 
 class AttentionDrawer():
@@ -11,17 +12,27 @@ class AttentionDrawer():
     def draw(self, sequence, attention):
         vocabulary = self.graph_builder.vocabulary
         words = vocabulary.inverse(sequence)
-        graph = self._build(words, attention)
+        edge_matrix = ()
+        if isinstance(self.graph_builder, DependencyGraph):
+            size = len(attention)
+            edge_matrix = self.graph_builder.build(
+                            sequence, size, return_label=True)
+        graph = self._build(words, attention, edge_matrix)
         return graph
 
-    def _build(self, nodes, matrix):
+    def _build(self, nodes, matrix, edge_matrix=()):
         graph = nx.Graph()
         graph.add_nodes_from(nodes)
         for i, row in enumerate(matrix):
             for j, col in enumerate(row):
                 if matrix[i][j] > 0:
-                    graph.add_edge(nodes[i], nodes[j],
-                                   weight=matrix[i][j])
+                    if len(edge_matrix) == 0:
+                        graph.add_edge(nodes[i], nodes[j],
+                                       weight=matrix[i][j])
+                    else:
+                        graph.add_edge(nodes[i], nodes[j],
+                                       weight=matrix[i][j],
+                                       label=edge_matrix[i][j])
 
         return graph
 
@@ -37,6 +48,11 @@ class AttentionDrawer():
                          node_color=node_color,
                          font_size=font_size, edge_color=edge_color,
                          width=width)
+
+        if isinstance(self.graph_builder, DependencyGraph):
+            labels = {(u, v): graph[u][v]["label"] for u, v in graph.edges()}
+            nx.draw_networkx_edge_labels(graph, pos, edge_labels=labels)
+
         plt.axis("off")
         plt.tight_layout()
         plt.show()
