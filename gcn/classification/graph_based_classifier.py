@@ -9,7 +9,7 @@ class GraphBasedClassifier():
     def __init__(self, vocab_size, graph_size,
                  embedding_size=100, hidden_size=100,
                  head_types=("concat",), heads=1, dropout=0.5,
-                 with_attention=True, with_lstm="before"):
+                 with_attention=True, lstm=None, bidirectional=False):
 
         self.vocab_size = vocab_size
         self.graph_size = graph_size
@@ -19,7 +19,8 @@ class GraphBasedClassifier():
         self.heads = heads
         self.dropout = dropout
         self.with_attention = with_attention
-        self.with_lstm = with_lstm
+        self.lstm = lstm
+        self.bidirectional = bidirectional
         self.model = None
         self._attention = None
 
@@ -34,10 +35,15 @@ class GraphBasedClassifier():
                                        embeddings_regularizer=K.regularizers.l2())
         vectors = embedding(X_in)
         _vectors = K.layers.Dropout(self.dropout)(vectors)
-        if self.with_lstm == "before":
-            o = K.layers.LSTM(self.hidden_size,
-                              return_sequences=True)(_vectors)
-            _vectors = o
+
+        lstm = None
+        if self.lstm is not None:
+            lstm = K.layers.LSTM(self.hidden_size, return_sequences=True)
+            if self.bidirectional:
+                lstm = K.layers.Bidirectional(lstm, merge_mode="concat")
+
+        if self.lstm is not None and self.lstm == "before":
+            _vectors = lstm(_vectors)
 
         attentions = []
         for ht in self.head_types:
@@ -53,10 +59,8 @@ class GraphBasedClassifier():
             _vectors, attention = gh([_vectors, A_in])
             attentions.append(attention)
 
-        if self.with_lstm == "after":
-            o, h, c = K.layers.LSTM(self.hidden_size, return_sequences=True,
-                                    return_state=True)(_vectors)
-            _vectors = c
+        if self.lstm is not None and self.lstm == "after":
+            _vectors = lstm(_vectors)
 
         merged = K.layers.Lambda(lambda x: K.backend.mean(x, axis=1))(_vectors)
         probs = K.layers.Dense(num_classes, activation="softmax")(merged)
