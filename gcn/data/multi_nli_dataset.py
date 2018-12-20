@@ -9,7 +9,7 @@ class MultiNLIDataset():
     def __init__(self, root, min_word_count=3, max_word_count=25,
                  prefix=""):
         self.storage = Storage(root)
-        self.nlp = spacy.load("en_core_web_sm", parser=False, entity=False)
+        self.nlp = spacy.load("en", parser=False, entity=False)
         self.min_word_count = min_word_count
         self.max_word_count = max_word_count
         self.prefix = prefix

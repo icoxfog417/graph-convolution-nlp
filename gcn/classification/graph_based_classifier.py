@@ -8,8 +8,9 @@ class GraphBasedClassifier():
 
     def __init__(self, vocab_size, graph_size,
                  embedding_size=100, hidden_size=100,
-                 head_types=("concat",), heads=1, dropout=0.5,
-                 with_attention=True, lstm=None, bidirectional=False):
+                 head_types=("concat", "average"), heads=1, dropout=0.5,
+                 node_level_bias=False, with_attention=True,
+                 lstm=None, bidirectional=False):
 
         self.vocab_size = vocab_size
         self.graph_size = graph_size
@@ -18,6 +19,7 @@ class GraphBasedClassifier():
         self.head_types = head_types
         self.heads = heads
         self.dropout = dropout
+        self.node_level_bias = node_level_bias
         self.with_attention = with_attention
         self.lstm = lstm
         self.bidirectional = bidirectional
@@ -38,7 +40,8 @@ class GraphBasedClassifier():
 
         lstm = None
         if self.lstm is not None:
-            lstm = K.layers.LSTM(self.hidden_size, return_sequences=True)
+            layer = K.layers.CuDNNLSTM if gpu_enable() else K.layers.LSTM
+            lstm = layer(self.hidden_size, return_sequences=True)
             if self.bidirectional:
                 lstm = K.layers.Bidirectional(lstm, merge_mode="concat")
 
@@ -55,7 +58,8 @@ class GraphBasedClassifier():
                         kernel_regularizer=K.regularizers.l2(),
                         attention=self.with_attention,
                         attn_kernel_regularizer=K.regularizers.l2(),
-                        return_attention=True)
+                        return_attention=True,
+                        node_level_bias=self.node_level_bias)
             _vectors, attention = gh([_vectors, A_in])
             attentions.append(attention)
 

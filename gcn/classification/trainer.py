@@ -33,12 +33,14 @@ class Trainer(BaseTrainer):
         self.graph_builder = DependencyGraph(lang, vocab)
 
     def build_similarity_graph_trainer(self, data_kind="train",
-                                       nearest_neighbor=3, mode="connectivity",
+                                       nearest_neighbor=4, threshold=0.3,
+                                       mode="similarity",
                                        representation="GloVe.6B.100d",
                                        save=True):
         super().build(data_kind, "text", save)
         vocab = self.preprocessor.vocabulary
         self.graph_builder = SimilarityGraph(vocab, nearest_neighbor,
+                                             threshold,
                                              mode, representation,
                                              self.storage.root)
 

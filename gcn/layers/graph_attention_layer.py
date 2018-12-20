@@ -22,6 +22,7 @@ class GraphAttentionLayer(Dense):
                  attn_kernel_constraint=None,
                  attention=True,
                  return_attention=False,
+                 node_level_bias=False,
                  **kwargs):
 
         if attn_heads_reduction not in {"concat", "average"}:
@@ -45,6 +46,7 @@ class GraphAttentionLayer(Dense):
         self.attn_kernel_constraint = constraints.get(attn_kernel_constraint)
         self.attention = attention
         self.return_attention = return_attention
+        self.node_level_bias = node_level_bias
         self.input_spec = [InputSpec(ndim=3), InputSpec(ndim=3)]
         self.supports_masking = False
 
@@ -110,15 +112,22 @@ class GraphAttentionLayer(Dense):
             self.attn_kernels.append(attn_kernel)
 
             if self.use_bias:
-                biases = []
-                for kind in ["self", "neigbor"]:
-                    name = "bias_attn_{}_{}".format(kind, head)
-                    bias = self.add_weight(shape=(N,),
-                                           initializer=self.bias_initializer,
-                                           regularizer=self.bias_regularizer,
-                                           constraint=self.bias_constraint,
-                                           name=name)
-                    biases.append(bias)
+                if self.node_level_bias:
+                    biases = self.add_weight(shape=(N, N),
+                                             initializer=self.bias_initializer,
+                                             regularizer=self.bias_regularizer,
+                                             constraint=self.bias_constraint,
+                                             name="attention_bias")
+                else:
+                    biases = []
+                    for kind in ["self", "neigbor"]:
+                        name = "bias_attn_{}_{}".format(kind, head)
+                        bias = self.add_weight(shape=(N,),
+                                               initializer=self.bias_initializer,
+                                               regularizer=self.bias_regularizer,
+                                               constraint=self.bias_constraint,
+                                               name=name)
+                        biases.append(bias)
                 self.attention_biases.append(biases)
 
         self.built = True
@@ -153,7 +162,7 @@ class GraphAttentionLayer(Dense):
                 attn_self = K.dot(features, attn_kernel)
                 attn_neighbor = K.dot(neighbor_features, attn_kernel)
 
-                if self.use_bias:
+                if self.use_bias and not self.node_level_bias:
                     self_attn_bias, neigbor_attn_bias = self.attention_biases[head]
                     attn_self = K.bias_add(attn_self, self_attn_bias)
                     attn_neighbor = K.bias_add(attn_neighbor, neigbor_attn_bias)
@@ -161,6 +170,9 @@ class GraphAttentionLayer(Dense):
                 attention = attn_neighbor + tf.transpose(attn_self, (0, 2, 1))
                 attention = tf.nn.tanh(attention)
                 attention = K.reshape(attention, (-1, N, N))
+                if self.use_bias and self.node_level_bias:
+                    bias = self.attention_biases[head]
+                    attention = K.bias_add(attention, bias)
 
                 mask = -10e9 * (1.0 - A)
                 attention += mask

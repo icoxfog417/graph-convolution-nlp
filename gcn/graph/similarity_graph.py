@@ -6,10 +6,11 @@ from chariot.storage import Storage
 
 class SimilarityGraph():
 
-    def __init__(self, vocabulary, nearest_neighbor=4, mode="similarity",
-                 representation="GloVe.6B.100d", root=""):
+    def __init__(self, vocabulary, nearest_neighbor=4, threshold=0.3,
+                 mode="similarity", representation="GloVe.6B.100d", root=""):
         self.vocabulary = vocabulary
         self.nearest_neighbor = nearest_neighbor
+        self.threshold = threshold
         self.mode = mode
         self.representation = representation
         default_root = os.path.join(os.path.dirname(__file__), "../../")
@@ -43,10 +44,16 @@ class SimilarityGraph():
 
         matrix = np.zeros((_size, _size))
         for i, top in enumerate(top_k):
+            _top = np.array([t for t in top
+                             if np.abs(similarity[i, t]) >= self.threshold])
+
+            if len(_top) == 0:
+                continue
+
             if self.mode == "connectivity":
-                matrix[i, top] = 1
+                matrix[i, _top] = 1
             else:
-                matrix[i, top] = similarity[i, top]
+                matrix[i, _top] = similarity[i, _top]
 
         return matrix
 

@@ -196,7 +196,8 @@ class TestGraphAttentionLayer(unittest.TestCase):
                     attn_heads=head,
                     attn_heads_reduction=merge,
                     dropout_rate=0.0,
-                    return_attention=return_attention)
+                    return_attention=return_attention,
+                    node_level_bias=True)
 
         if return_attention:
             output, attn = layer([nodes, matrix])

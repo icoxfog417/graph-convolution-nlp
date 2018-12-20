@@ -32,13 +32,14 @@ class TfidfClassifier():
 class LSTMClassifier():
 
     def __init__(self, vocab_size, embedding_size=100, hidden_size=100,
-                 layers=1, dropout=0.5):
+                 layers=1, dropout=0.5, bidirectional=False):
 
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.layers = layers
         self.dropout = dropout
+        self.bidirectional = bidirectional
         self.model = None
 
     def build(self, num_classes, preprocessor=None):
@@ -51,7 +52,11 @@ class LSTMClassifier():
         model.add(embedding)
         model.add(K.layers.Dropout(self.dropout))
         for layer in range(self.layers):
-            model.add(K.layers.LSTM(self.hidden_size))
+            lstm_layer = K.layers.CuDNNLSTM if gpu_enable() else K.layers.LSTM
+            lstm = lstm_layer(self.hidden_size)
+            if self.bidirectional:
+                lstm = K.layers.Bidirectional(lstm, merge_mode="concat")
+            model.add(lstm)
 
         model.add(K.layers.Dropout(self.dropout))
         model.add(K.layers.Dense(num_classes, activation="softmax"))
