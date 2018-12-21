@@ -25,6 +25,7 @@ class GraphBasedClassifier():
         self.bidirectional = bidirectional
         self.model = None
         self._attention = None
+        self.preprocessor = None
 
     def build(self, num_classes, preprocessor=None):
         X_in = K.layers.Input(shape=(self.graph_size,))
@@ -34,7 +35,8 @@ class GraphBasedClassifier():
         embedding = K.layers.Embedding(input_dim=self.vocab_size,
                                        output_dim=self.embedding_size,
                                        input_length=self.graph_size,
-                                       embeddings_regularizer=K.regularizers.l2())
+                                       embeddings_regularizer=K.regularizers.l2(),
+                                       name="embedding")
         vectors = embedding(X_in)
         _vectors = K.layers.Dropout(self.dropout)(vectors)
 

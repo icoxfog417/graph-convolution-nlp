@@ -11,7 +11,7 @@ class AttentionDrawer():
 
     def draw(self, sequence, attention):
         vocabulary = self.graph_builder.vocabulary
-        words = vocabulary.inverse(sequence)
+        words = vocabulary.inverse(sequence, )
         edge_matrix = ()
         if isinstance(self.graph_builder, DependencyGraph):
             size = len(attention)
@@ -23,7 +23,7 @@ class AttentionDrawer():
     def _build(self, nodes, matrix, edge_matrix=()):
         graph = nx.Graph()
         graph.add_nodes_from(nodes)
-        for i, row in enumerate(matrix):
+        for i, row in enumerate(nodes):
             for j, col in enumerate(row):
                 if matrix[i][j] > 0:
                     if len(edge_matrix) == 0:

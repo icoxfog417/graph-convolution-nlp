@@ -20,6 +20,9 @@ class DependencyGraph():
         tokens = self._parser(sentence)
         for token in tokens:
             # print("{} =({})=> {}".format(token.text, token.dep_, token.head.text))
+            if not token.dep_:
+                raise Exception("Dependency Parse does not work well.")
+
             if token.i < _size and token.head.i < _size:
                 v = token.dep_ if return_label else 1
                 matrix[token.i][token.head.i] = v
