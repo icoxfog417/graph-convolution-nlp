@@ -1,14 +1,17 @@
 import os
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+import spacy
 from chariot.storage import Storage
+from chariot.resource.word_vector import WordVector
 
 
 class SimilarityGraph():
 
-    def __init__(self, vocabulary, nearest_neighbor=4, threshold=0.3,
+    def __init__(self, lang, nearest_neighbor=4, threshold=0.3,
                  mode="similarity", representation="GloVe.6B.100d", root=""):
-        self.vocabulary = vocabulary
+        self.lang = lang
+        self._parser = spacy.load(self.lang, disable=["ner", "textcat"])
         self.nearest_neighbor = nearest_neighbor
         self.threshold = threshold
         self.mode = mode
@@ -17,22 +20,38 @@ class SimilarityGraph():
         _root = root if root else default_root
 
         self.storage = Storage(_root)
-        self.embedding = None
+        self.key_vector = {}
+        self._unknown = None
 
-    def build(self, sequence, size=-1):
+    def get_nodes(self, sentence):
+        return [t.text for t in self._parser(sentence)]
+
+    def build(self, sentence, size=-1):
         if 0 < size < self.nearest_neighbor:
             raise Exception("Matrix size is not enough for neighbors.")
 
-        if self.embedding is None:
+        if len(self.key_vector) == 0:
             # download representation
             self.storage.chakin(name=self.representation)
 
             # Make embedding matrix
             file_path = "external/{}.txt".format(self.representation.lower())
-            self.embedding = self.vocabulary.make_embedding(
-                                self.storage.data_path(file_path))
+            wv = WordVector(self.storage.data_path(file_path))
+            self.key_vector = wv.load()
 
-        vectors = np.vstack([self.embedding[s] for s in sequence])
+            for k in self.key_vector:
+                self._unknown = np.zeros(len(self.key_vector[k]))
+                break
+
+        tokens = self._parser(sentence)
+        vectors = []
+        for t in tokens:
+            if t.text in self.key_vector:
+                vectors.append(self.key_vector[t.text])
+            else:
+                vectors.append(self._unknown)
+
+        vectors = np.vstack(vectors)
         matrix = self._build(vectors, size)
         return matrix
 
@@ -57,6 +76,6 @@ class SimilarityGraph():
 
         return matrix
 
-    def batch_build(self, sequences, size=-1):
-        matrices = [self.build(s, size) for s in sequences]
+    def batch_build(self, sentences, size=-1):
+        matrices = [self.build(s, size) for s in sentences]
         return np.array(matrices)

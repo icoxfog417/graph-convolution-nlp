@@ -4,20 +4,19 @@ import spacy
 
 class DependencyGraph():
 
-    def __init__(self, lang, vocabulary):
+    def __init__(self, lang):
         self.lang = lang
         self._parser = spacy.load(self.lang, disable=["ner", "textcat"])
-        self.vocabulary = vocabulary
 
-    def build(self, sequence, size=-1, return_label=False):
-        words = self.vocabulary.inverse(sequence)
-        sentence = " ".join(words)  # have to consider non-space-separated lang
+    def get_nodes(self, sentence):
+        return [t.text for t in self._parser(sentence)]
 
-        _size = size if size > 0 else len(sequence)
+    def build(self, sentence, size=-1, return_label=False):
+        tokens = self._parser(sentence)
+        _size = size if size > 0 else len(tokens)
         matrix = np.zeros((_size, _size))
         if return_label:
             matrix = [[""] * matrix.shape[1] for r in range(matrix.shape[0])]
-        tokens = self._parser(sentence)
         for token in tokens:
             # print("{} =({})=> {}".format(token.text, token.dep_, token.head.text))
             if not token.dep_:
@@ -29,6 +28,6 @@ class DependencyGraph():
 
         return matrix
 
-    def batch_build(self, sequences, size=-1):
-        matrices = [self.build(s, size) for s in sequences]
+    def batch_build(self, sentences, size=-1):
+        matrices = [self.build(s, size) for s in sentences]
         return np.array(matrices)

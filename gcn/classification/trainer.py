@@ -7,6 +7,7 @@ from gcn.base_trainer import BaseTrainer
 from gcn.data.multi_nli_dataset import MultiNLIDataset
 from gcn.graph.dependency_graph import DependencyGraph
 from gcn.graph.similarity_graph import SimilarityGraph
+from gcn.graph.static_graph import StaticGraph
 
 
 class Trainer(BaseTrainer):
@@ -43,6 +44,12 @@ class Trainer(BaseTrainer):
                                              threshold,
                                              mode, representation,
                                              self.storage.root)
+
+    def build_static_graph_trainer(self, data_kind="train",
+                                   kind="self", fill=False,
+                                   save=True):
+        super().build(data_kind, "text", save)
+        self.graph_builder = StaticGraph(kind, fill)
 
     def train(self, model, data_kind="train",
               lr=1e-3, batch_size=20, sequence_length=25, 
@@ -85,6 +92,8 @@ class Trainer(BaseTrainer):
         elif isinstance(data, pd.Series):
             _data = data.to_frame()
 
+        graph = self.graph_builder.batch_build(_data["text"], length)
+
         preprocess = Preprocess({
             "text": self.preprocessor
         })
@@ -92,8 +101,7 @@ class Trainer(BaseTrainer):
                                                length=length)})
 
         _data = preprocess.transform(_data)
-        graph = self.graph_builder.batch_build(_data["text"], length)
-        _data["graph"] = graph
         _data = feeder.transform(_data)
+        _data["graph"] = graph
 
         return _data

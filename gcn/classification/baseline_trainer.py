@@ -37,6 +37,7 @@ class BaselineTrainer(BaseTrainer):
             raise Exception("Trainer's preprocessor is not built.")
 
         if representation is not None:
+            print("Load word embedding...")
             self.storage.chakin(name=representation)
             file_path = "external/{}.txt".format(representation.lower())
             weights = [self.preprocessor.vocabulary.make_embedding(

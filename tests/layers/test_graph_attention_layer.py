@@ -76,7 +76,7 @@ class TestGraphAttentionLayer(unittest.TestCase):
                                               feature_size, feature_units,
                                               header="GAL After")
 
-        self.assertGreater(hit_prob, 0.7)
+        self.assertGreater(hit_prob, 0.6)
 
     def test_attention_before(self):
         node_count, feature_size, feature_units = self.TEST_PATTERN
@@ -91,7 +91,7 @@ class TestGraphAttentionLayer(unittest.TestCase):
                                               node_count,
                                               feature_size, feature_units,
                                               header="GAL Before")
-        self.assertGreater(hit_prob, 0.7)
+        self.assertGreater(hit_prob, 0.6)
 
     def test_attention_theoretical(self):
         node_count, feature_size, feature_units = self.TEST_PATTERN
@@ -106,7 +106,7 @@ class TestGraphAttentionLayer(unittest.TestCase):
                                               node_count,
                                               feature_size, feature_units,
                                               header="Theoretical Attention")
-        self.assertGreater(hit_prob, 0.7)
+        self.assertGreater(hit_prob, 0.6)
 
     def _test_attention(self, make_model,
                         node_count, feature_size, feature_units,
@@ -196,8 +196,7 @@ class TestGraphAttentionLayer(unittest.TestCase):
                     attn_heads=head,
                     attn_heads_reduction=merge,
                     dropout_rate=0.0,
-                    return_attention=return_attention,
-                    node_level_bias=True)
+                    return_attention=return_attention)
 
         if return_attention:
             output, attn = layer([nodes, matrix])

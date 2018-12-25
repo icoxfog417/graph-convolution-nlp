@@ -14,7 +14,7 @@ class TestSimilarityGraph(unittest.TestCase):
         node_count = 10
         feature_size = 5
 
-        graph = SimilarityGraph(None, nearest_neighbor, root=root)
+        graph = SimilarityGraph("en", nearest_neighbor, root=root)
 
         vectors = np.random.uniform(size=node_count * feature_size)
         vectors = vectors.reshape(node_count, feature_size)
@@ -34,25 +34,17 @@ class TestSimilarityGraph(unittest.TestCase):
                     self.assertEqual(tuple(similarity[i, top]),
                                      tuple(matrix[i, top]))
 
-    def xtest_build_from_vocab(self):
+    def test_build_from_vocab(self):
         root = os.path.join(os.path.dirname(__file__), "../../")
-        vocab = Vocabulary()
-        vocab.set(["you", "and", "I", "loaded", "word", "vector", "now"])
-
-        graph = SimilarityGraph(vocab, nearest_neighbor=2, root=root)
-
-        matrix = graph.build(vocab.transform(["you loaded now"]))
+        graph = SimilarityGraph("en", nearest_neighbor=2, root=root)
+        matrix = graph.build("you loaded now")
         self.assertTrue(matrix.shape, (3, 3))
 
     def test_batch_build(self):
         root = os.path.join(os.path.dirname(__file__), "../../")
         sentences = ["I am living at house",
                      "You are waiting on the station"]
-        vocab = Vocabulary()
-        vocab.set(sentences[0].split() + sentences[1].split())
-
-        graph = SimilarityGraph(vocab, nearest_neighbor=2, root=root)
-        sequences = vocab.transform(sentences)
-        matrices = graph.batch_build(sequences, size=6)
+        graph = SimilarityGraph("en", nearest_neighbor=2, root=root)
+        matrices = graph.batch_build(sentences, size=6)
 
         self.assertEqual(matrices.shape, (2, 6, 6))

@@ -4,8 +4,8 @@ import numpy as np
 from sklearn.metrics import classification_report
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
 from gcn.data.multi_nli_dataset import MultiNLIDataset
-from gcn.classification.baseline_trainer import BaselineTrainer
 from gcn.classification.baseline import LSTMClassifier
+from gcn.classification.baseline_trainer import BaselineTrainer
 
 
 def main():

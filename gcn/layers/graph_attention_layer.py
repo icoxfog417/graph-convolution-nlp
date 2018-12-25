@@ -151,7 +151,7 @@ class GraphAttentionLayer(Dense):
 
             if not self.attention:
                 attention = A
-                node_features = tf.matmul(attention, dropout_feat)  # (N x F")
+                aggregation = tf.matmul(attention, dropout_feat)  # (N x F")
             else:
                 # Attention kernel a in the paper (2F" x 1)
                 neighbor_kernel = self.neighbor_kernels[head]
@@ -180,14 +180,16 @@ class GraphAttentionLayer(Dense):
                 attention = tf.nn.softmax(attention)
                 dropout_attn = Dropout(self.dropout_rate)(attention)
 
-                node_features = tf.matmul(dropout_attn, dropout_feat)
+                aggregation = tf.matmul(dropout_attn, dropout_feat)
 
+            node_features = features + aggregation
             if self.use_bias:
                 node_features = K.bias_add(node_features, self.biases[head])
 
+            # Add output of attention
             if self.return_attention:
                 attentions.append(attention)
-            # Add output of attention head to final output
+
             outputs.append(node_features)
 
         # Aggregate the heads" output according to the reduction method

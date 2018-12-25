@@ -29,6 +29,35 @@ class TfidfClassifier():
         return self.model.predict_proba(x)
 
 
+class MergeClassifier():
+
+    def __init__(self, vocab_size, embedding_size=100):
+        self.vocab_size = vocab_size
+        self.embedding_size = embedding_size
+        self.model = None
+
+    def build(self, num_classes, preprocessor=None):
+        self.preprocessor = preprocessor
+        model = K.Sequential()
+        embedding = K.layers.Embedding(input_dim=self.vocab_size,
+                                       output_dim=self.embedding_size,
+                                       embeddings_regularizer=K.regularizers.l2(),
+                                       name="embedding")
+        model.add(embedding)
+        model.add(K.layers.Lambda(lambda x: K.backend.mean(x, axis=1)))
+        model.add(K.layers.Dense(num_classes, activation="softmax"))
+
+        self.model = model
+
+    def predict(self, x):
+        preds = self.predict_proba(x)
+        return np.argmax(preds, axis=1)
+
+    def predict_proba(self, x):
+        _x = x if self.preprocessor is None else self.preprocessor(x)
+        return self.model.predict(_x)
+
+
 class LSTMClassifier():
 
     def __init__(self, vocab_size, embedding_size=100, hidden_size=100,
