@@ -74,7 +74,13 @@ class BaseTrainer():
             return 0
 
         r = self.download()
-        data = r.train_data() if data_kind == "train" else r.valid_data()
+        if data_kind == "test":
+            data = r.test_data()
+        elif data_kind == "valid":
+            data = r.valid_data()
+        else:
+            data = r.train_data()
+
         print("Building Dictionary from {} data...".format(data_kind))
         if not field:
             self.preprocessor.fit(data)

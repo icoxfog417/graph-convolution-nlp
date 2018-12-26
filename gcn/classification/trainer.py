@@ -12,12 +12,12 @@ from gcn.graph.static_graph import StaticGraph
 
 class Trainer(BaseTrainer):
 
-    def __init__(self, root="", lang=None, min_df=1, max_df=1.0,
+    def __init__(self, graph_builder, root="", min_df=1, max_df=1.0,
                  unknown="<unk>", preprocessor_name="preprocessor",
                  log_dir=""):
-        super().__init__(root, lang, min_df, max_df, unknown,
+        super().__init__(root, graph_builder.lang, min_df, max_df, unknown,
                          preprocessor_name, log_dir)
-        self.graph_builder = None
+        self.graph_builder = graph_builder
 
     def download(self):
         r = MultiNLIDataset(self.storage.root).download()
@@ -27,32 +27,11 @@ class Trainer(BaseTrainer):
     def num_classes(self):
         return len(MultiNLIDataset.labels())
 
-    def build_dependency_graph_trainer(self, data_kind="train",
-                                       lang="en", save=True):
+    def build(self, data_kind="train", save=True):
         super().build(data_kind, "text", save)
-        vocab = self.preprocessor.vocabulary
-        self.graph_builder = DependencyGraph(lang, vocab)
-
-    def build_similarity_graph_trainer(self, data_kind="train",
-                                       nearest_neighbor=4, threshold=0.3,
-                                       mode="similarity",
-                                       representation="GloVe.6B.100d",
-                                       save=True):
-        super().build(data_kind, "text", save)
-        vocab = self.preprocessor.vocabulary
-        self.graph_builder = SimilarityGraph(vocab, nearest_neighbor,
-                                             threshold,
-                                             mode, representation,
-                                             self.storage.root)
-
-    def build_static_graph_trainer(self, data_kind="train",
-                                   kind="self", fill=False,
-                                   save=True):
-        super().build(data_kind, "text", save)
-        self.graph_builder = StaticGraph(kind, fill)
 
     def train(self, model, data_kind="train",
-              lr=1e-3, batch_size=20, sequence_length=25, 
+              lr=1e-3, batch_size=20, sequence_length=25,
               representation="GloVe.6B.100d",
               epochs=40, verbose=2):
 

@@ -25,18 +25,18 @@ class AttentionDrawer():
 
     def _build(self, nodes, matrix, edge_matrix=()):
         graph = nx.Graph()
-        graph.add_nodes_from(nodes[i] for i in range(len(matrix)))
-        print(matrix)
-        for i in range(matrix.shape[0]):
-            for j in range(matrix.shape[1]):
+        _size = min(len(nodes), len(matrix))
+        graph.add_nodes_from(nodes[i] for i in range(_size))
+        for i in range(_size):
+            for j in range(_size):
                 if matrix[i][j] > 0:
                     if len(edge_matrix) == 0:
                         graph.add_edge(nodes[i], nodes[j],
-                                    weight=matrix[i][j])
+                                       weight=matrix[i][j])
                     else:
                         graph.add_edge(nodes[i], nodes[j],
-                                    weight=matrix[i][j],
-                                    label=edge_matrix[i][j])
+                                       weight=matrix[i][j],
+                                       label=edge_matrix[i][j])
 
         return graph
 

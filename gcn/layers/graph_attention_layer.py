@@ -182,7 +182,7 @@ class GraphAttentionLayer(Dense):
 
                 aggregation = tf.matmul(dropout_attn, dropout_feat)
 
-            node_features = features + aggregation
+            node_features = dropout_feat + aggregation
             if self.use_bias:
                 node_features = K.bias_add(node_features, self.biases[head])
 

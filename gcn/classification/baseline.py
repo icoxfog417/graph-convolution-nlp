@@ -44,7 +44,7 @@ class MergeClassifier():
                                        embeddings_regularizer=K.regularizers.l2(),
                                        name="embedding")
         model.add(embedding)
-        model.add(K.layers.Lambda(lambda x: K.backend.mean(x, axis=1)))
+        model.add(K.layers.Lambda(lambda x: K.backend.sum(x, axis=1)))
         model.add(K.layers.Dense(num_classes, activation="softmax"))
 
         self.model = model

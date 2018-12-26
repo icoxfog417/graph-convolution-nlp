@@ -8,7 +8,7 @@ class GraphBasedClassifier():
 
     def __init__(self, vocab_size, graph_size,
                  embedding_size=100, hidden_size=100,
-                 head_types=("concat", "average"), heads=1, dropout=0.5,
+                 head_types=("concat", "average"), heads=1, dropout=0.6,
                  node_level_bias=False, with_attention=True,
                  lstm=None, bidirectional=False):
 
@@ -40,9 +40,9 @@ class GraphBasedClassifier():
         vectors = embedding(X_in)
         _vectors = K.layers.Dropout(self.dropout)(vectors)
 
+        layer = K.layers.CuDNNLSTM if gpu_enable() else K.layers.LSTM
         lstm = None
         if self.lstm is not None:
-            layer = K.layers.CuDNNLSTM if gpu_enable() else K.layers.LSTM
             lstm = layer(self.hidden_size, return_sequences=True)
             if self.bidirectional:
                 lstm = K.layers.Bidirectional(lstm, merge_mode="concat")
@@ -68,7 +68,7 @@ class GraphBasedClassifier():
         if self.lstm is not None and self.lstm == "after":
             _vectors = lstm(_vectors)
 
-        merged = K.layers.Lambda(lambda x: K.backend.mean(x, axis=1))(_vectors)
+        merged = K.layers.Lambda(lambda x: K.backend.sum(x, axis=1))(_vectors)
         probs = K.layers.Dense(num_classes, activation="softmax")(merged)
 
         self.model = K.models.Model(inputs=[X_in, A_in], outputs=probs)

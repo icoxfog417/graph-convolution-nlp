@@ -4,7 +4,7 @@ import spacy
 
 class StaticGraph():
 
-    def __init__(self, lang, kind="self", fill=False):
+    def __init__(self, lang, kind="previous", fill=True):
         self.lang = lang
         self._parser = spacy.load(self.lang, disable=["ner", "textcat"])
         self.kind = kind
