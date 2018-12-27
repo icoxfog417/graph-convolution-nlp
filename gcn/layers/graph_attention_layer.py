@@ -28,9 +28,9 @@ class GraphAttentionLayer(Dense):
         if attn_heads_reduction not in {"concat", "average"}:
             raise ValueError("Possbile reduction methods: concat, average")
 
-        super(GraphAttentionLayer, self).__init__(units=feature_units,
-                                                  activation=activation,
-                                                  **kwargs)
+        super().__init__(units=feature_units,
+                         activation=activation,
+                         **kwargs)
 
         # Number of attention heads (K in the paper)
         self.attn_heads = attn_heads
@@ -48,8 +48,7 @@ class GraphAttentionLayer(Dense):
         self.return_attention = return_attention
         self.node_level_bias = node_level_bias
         self.input_spec = [InputSpec(ndim=3), InputSpec(ndim=3)]
-        self.supports_masking = False
-
+        self.supports_masking = True
         # Populated by build()
         self.kernels = []
         self.biases = []
@@ -211,10 +210,21 @@ class GraphAttentionLayer(Dense):
         X_dims, A_dims = [dims.as_list() for dims in input_shape]
         assert len(X_dims) == 3
         assert len(A_dims) == 3
-        output_shape = X_dims[0], X_dims[0], self.output_dim
+        output_shape = X_dims[0], X_dims[1], self.output_dim
 
         if self.return_attention:
             return (tf.TensorShape(output_shape),
                     tf.TensorShape(A_dims.insert(1, self.attn_heads)))
         else:
             return tf.TensorShape(output_shape)
+
+    def compute_mask(self, inputs, mask):
+        if isinstance(mask, list):
+            output_mask = mask[0]
+        else:
+            output_mask = mask
+
+        if self.return_attention:
+            return [output_mask] + [None]
+        else:
+            return output_mask

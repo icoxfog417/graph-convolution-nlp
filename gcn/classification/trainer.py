@@ -29,6 +29,8 @@ class Trainer(BaseTrainer):
 
     def build(self, data_kind="train", save=True):
         super().build(data_kind, "text", save)
+        if self.preprocessor.vocabulary.pad != 0:
+            raise Exception("Padding is not executed by zero.")
 
     def train(self, model, data_kind="train",
               lr=1e-3, batch_size=20, sequence_length=25,

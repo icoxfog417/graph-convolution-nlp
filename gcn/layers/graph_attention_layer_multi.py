@@ -175,7 +175,7 @@ class GraphAttentionLayer(Dense):
         X_dims, A_dims = [dims.as_list() for dims in input_shape]
         assert len(X_dims) == 3
         assert len(A_dims) == 3
-        output_shape = X_dims[0], X_dims[0], self.output_dim
+        output_shape = X_dims[0], X_dims[1], self.output_dim
 
         if self.return_attention:
             return (tf.TensorShape(output_shape),

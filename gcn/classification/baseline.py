@@ -4,6 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import cross_val_score
 from tensorflow.python import keras as K
+import tensorflow as tf
 from gcn.util import gpu_enable
 
 
@@ -31,9 +32,11 @@ class TfidfClassifier():
 
 class MergeClassifier():
 
-    def __init__(self, vocab_size, embedding_size=100):
+    def __init__(self, vocab_size, embedding_size=100,
+                 merge_method="add"):
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size
+        self.merge_method = merge_method
         self.model = None
 
     def build(self, num_classes, preprocessor=None):
@@ -42,9 +45,20 @@ class MergeClassifier():
         embedding = K.layers.Embedding(input_dim=self.vocab_size,
                                        output_dim=self.embedding_size,
                                        embeddings_regularizer=K.regularizers.l2(),
-                                       name="embedding")
+                                       name="embedding",
+                                       mask_zero=True)
         model.add(embedding)
-        model.add(K.layers.Lambda(lambda x: K.backend.sum(x, axis=1)))
+
+        if self.merge_method == "mean":
+            def mask_mean(x, mask):
+                sum = K.backend.sum(x, axis=1)
+                total = K.backend.sum(tf.to_float(mask), axis=1, keepdims=True)
+                return tf.divide(sum, total)
+
+            model.add(K.layers.Lambda(mask_mean))
+        else:
+            model.add(K.layers.Lambda(lambda x: K.backend.sum(x, axis=1)))
+
         model.add(K.layers.Dense(num_classes, activation="softmax"))
 
         self.model = model
@@ -77,7 +91,8 @@ class LSTMClassifier():
         embedding = K.layers.Embedding(input_dim=self.vocab_size,
                                        output_dim=self.embedding_size,
                                        embeddings_regularizer=K.regularizers.l2(),
-                                       name="embedding")
+                                       name="embedding",
+                                       mask_zero=True)
         model.add(embedding)
         model.add(K.layers.Dropout(self.dropout))
         for layer in range(self.layers):

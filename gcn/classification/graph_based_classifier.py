@@ -36,19 +36,23 @@ class GraphBasedClassifier():
                                        output_dim=self.embedding_size,
                                        input_length=self.graph_size,
                                        embeddings_regularizer=K.regularizers.l2(),
-                                       name="embedding")
+                                       name="embedding",
+                                       mask_zero=True)
         vectors = embedding(X_in)
         _vectors = K.layers.Dropout(self.dropout)(vectors)
 
-        layer = K.layers.CuDNNLSTM if gpu_enable() else K.layers.LSTM
-        lstm = None
-        if self.lstm is not None:
-            lstm = layer(self.hidden_size, return_sequences=True)
+        def lstm(return_sequences):
+            # CuDNNLSTM does not support mask.
+            # layer = K.layers.CuDNNLSTM if gpu_enable() else K.layers.LSTM
+            layer = K.layers.LSTM
+            _lstm = layer(self.hidden_size, return_sequences=return_sequences,
+                          dropout=self.dropout, recurrent_dropout=self.dropout)
             if self.bidirectional:
-                lstm = K.layers.Bidirectional(lstm, merge_mode="concat")
+                _lstm = K.layers.Bidirectional(_lstm, merge_mode="concat")
+            return _lstm
 
         if self.lstm is not None and self.lstm == "before":
-            _vectors = lstm(_vectors)
+            _vectors = lstm(return_sequences=True)(_vectors)
 
         attentions = []
         for ht in self.head_types:
@@ -66,9 +70,10 @@ class GraphBasedClassifier():
             attentions.append(attention)
 
         if self.lstm is not None and self.lstm == "after":
-            _vectors = lstm(_vectors)
+            merged = lstm(return_sequences=False)(_vectors)
+        else:
+            merged = K.layers.Lambda(lambda x: K.backend.sum(x, axis=1))(_vectors)
 
-        merged = K.layers.Lambda(lambda x: K.backend.sum(x, axis=1))(_vectors)
         probs = K.layers.Dense(num_classes, activation="softmax")(merged)
 
         self.model = K.models.Model(inputs=[X_in, A_in], outputs=probs)
