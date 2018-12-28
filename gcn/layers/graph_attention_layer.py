@@ -173,12 +173,14 @@ class GraphAttentionLayer(Dense):
                     bias = self.attention_biases[head]
                     attention = K.bias_add(attention, bias)
 
-                mask = -10e9 * (1.0 - A)
+                has_connection = tf.to_float(tf.greater(A, 0.0))
+
+                mask = -10e9 * (1.0 - has_connection)
                 attention += mask
 
-                attention = tf.nn.softmax(attention)
-                dropout_attn = Dropout(self.dropout_rate)(attention)
+                attention = tf.nn.softmax(attention) * has_connection
 
+                dropout_attn = Dropout(self.dropout_rate)(attention)
                 aggregation = tf.matmul(dropout_attn, dropout_feat)
 
             node_features = dropout_feat + aggregation

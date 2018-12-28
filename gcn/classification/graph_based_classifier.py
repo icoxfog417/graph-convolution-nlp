@@ -1,5 +1,6 @@
 import numpy as np
 from tensorflow.python import keras as K
+import tensorflow as tf
 from gcn.layers.graph_attention_layer import GraphAttentionLayer
 from gcn.util import gpu_enable
 
@@ -8,7 +9,7 @@ class GraphBasedClassifier():
 
     def __init__(self, vocab_size, graph_size,
                  embedding_size=100, hidden_size=100,
-                 head_types=("concat", "average"), heads=1, dropout=0.6,
+                 head_types=("concat",), heads=1, dropout=0.6,
                  node_level_bias=False, with_attention=True,
                  lstm=None, bidirectional=False):
 
@@ -90,4 +91,11 @@ class GraphBasedClassifier():
 
     def show_attention(self, x):
         _x = x if self.preprocessor is None else self.preprocessor(x)
-        return self._attention.predict(_x)
+        attentions = self._attention.predict(_x)
+        if len(self.head_types) == 1:
+            attentions = [attentions]
+
+        # batch, layer, head, node_size, node_size
+        attentions = np.array(attentions)
+        attentions = np.transpose(attentions, (1, 0, 2, 3, 4))
+        return attentions

@@ -33,7 +33,6 @@ def main(graph_type="dependency", epochs=25):
         return values
 
     model = GraphBasedClassifier(vocab_size, sequence_length,
-                                 head_types=("concat", "average"), heads=8,
                                  lstm=None)
     model.build(trainer.num_classes, preprocessor)
 
